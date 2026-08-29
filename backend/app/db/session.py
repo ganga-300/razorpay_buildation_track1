@@ -10,13 +10,24 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import StaticPool
 
 from app.config import settings
 
-# SQLite needs no pool tuning; Postgres benefits from pre-ping to survive
-# Render's connection recycling.
 _engine_kwargs: dict[str, object] = {"echo": settings.debug, "future": True}
-if not settings.is_sqlite:
+
+if settings.is_sqlite:
+    # An in-memory SQLite database lives inside a single connection. Without
+    # StaticPool every session would check out a fresh connection and therefore
+    # a fresh, empty database — schema created in one session would be invisible
+    # to the next.
+    if ":memory:" in settings.database_url or "mode=memory" in settings.database_url:
+        _engine_kwargs |= {
+            "poolclass": StaticPool,
+            "connect_args": {"check_same_thread": False},
+        }
+else:
+    # Postgres benefits from pre-ping to survive Render's connection recycling.
     _engine_kwargs |= {"pool_pre_ping": True, "pool_size": 5, "max_overflow": 10}
 
 engine: AsyncEngine = create_async_engine(settings.database_url, **_engine_kwargs)

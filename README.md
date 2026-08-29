@@ -64,6 +64,7 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env      # then fill in your Razorpay TEST keys
 alembic upgrade head
+python -m scripts.seed_catalog     # 9 demo products
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -106,10 +107,67 @@ cd backend && .venv/bin/python -m pytest
 
 ---
 
+## The agent-readable catalog
+
+`GET /catalog` returns a **document**, not a bare array. Alongside the products it
+carries a schema version, the merchant identity, and — the part that matters for
+the judging bar — the **published purchase policy**:
+
+```jsonc
+{
+  "schema_version": "1.0",
+  "spec": "autobuy.catalog/v1",
+  "merchant":     { "payment_provider": "razorpay", "payment_mode": "test" },
+  "capabilities": {
+    "purchase_policy": {
+      "auto_approve_limit":      { "amount_minor":   50000, "display": "₹500.00" },
+      "per_transaction_cap":     { "amount_minor":  200000, "display": "₹2,000.00" },
+      "daily_cap":               { "amount_minor": 1000000, "display": "₹10,000.00" },
+      "approval_required_above": { "amount_minor":   50000, "display": "₹500.00" },
+      "enforcement": "server-side"
+    }
+  },
+  "products": [ /* ... */ ]
+}
+```
+
+**Bounds are discoverable, not merely enforced.** A well-behaved agent reads the
+policy from the same call that finds products and self-limits before it ever
+attempts a purchase. A badly-behaved one still gets stopped server-side by
+`services/guardrails.py`. That is what makes a money action *explainable* rather
+than just blocked.
+
+Money is always an **integer count of minor units** (paise) plus an explicit
+currency. The `display` string is for showing humans — never for parsing.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /catalog` | Catalog document. Filters: `q`, `category`, `min_price_minor`, `max_price_minor`, `in_stock_only`, `limit` |
+| `GET /catalog/{id}` | One product, same envelope. 404 for unknown or deactivated items |
+
+Search is **AND across tokens** — `q=wireless noise` matches only products
+containing both words, so an agent's multi-word query narrows rather than widens.
+
+### Agent tools
+
+`search_catalog` and `get_product` call the same service layer the HTTP routes
+use, so the agent and a human browsing the API can never see different results.
+Every tool returns a uniform envelope:
+
+```jsonc
+{ "ok": true,  "data":  { /* ... */ } }
+{ "ok": false, "error": { "code": "product_not_found", "message": "...", "retryable": false } }
+```
+
+A tool never raises into the agent loop. A failure becomes something the model can
+read and explain to the buyer — the substrate for Milestone 4's graceful failure.
+
+---
+
 ## Milestone status
 
 - [x] **M0** — Scaffold, env config, health checks
-- [ ] **M1** — Agent-readable catalog
+- [x] **M1** — Agent-readable catalog + search/get tools
 - [ ] **M2** — LangGraph purchasing agent
 - [ ] **M3** — Chat UI + merchant dashboard
 - [ ] **M4** — Guardrails, audit trail, graceful failure

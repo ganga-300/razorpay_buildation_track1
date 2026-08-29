@@ -13,8 +13,63 @@ os.environ.setdefault("DEBUG", "false")
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.base import Base
+from app.db.models import Product
+from app.db.session import SessionLocal, engine
 from app.main import create_app
+
+# A deliberately small catalog spanning the guardrail bands, so tests can assert
+# on price filtering and stock filtering without depending on the seed script.
+TEST_PRODUCTS: list[dict[str, object]] = [
+    {
+        "id": "prd-cable",
+        "name": "Braided USB-C Cable",
+        "description": "Two-metre braided charging cable.",
+        "category": "accessories",
+        "price_minor": 34_900,
+        "stock": 100,
+        "attributes": {"brand": "Volt"},
+    },
+    {
+        "id": "prd-mouse",
+        "name": "Silent Wireless Mouse",
+        "description": "Silent wireless mouse with bluetooth multi-device pairing.",
+        "category": "peripherals",
+        "price_minor": 129_900,
+        "stock": 10,
+        "attributes": {"brand": "Volt"},
+    },
+    {
+        "id": "prd-headphones",
+        "name": "Wireless Noise Cancelling Headphones",
+        "description": "Over-ear wireless headphones with active noise cancellation.",
+        "category": "audio",
+        "price_minor": 249_900,
+        "stock": 5,
+        "attributes": {"brand": "Sonora", "anc": True},
+    },
+    {
+        "id": "prd-espresso",
+        "name": "Espresso Machine",
+        "description": "Semi-automatic espresso machine. Out of stock.",
+        "category": "home",
+        "price_minor": 899_900,
+        "stock": 0,
+        "attributes": {"brand": "Terra"},
+    },
+    {
+        "id": "prd-retired",
+        "name": "Discontinued Lamp",
+        "description": "No longer sold.",
+        "category": "home",
+        "price_minor": 59_900,
+        "stock": 3,
+        "attributes": {},
+        "is_active": False,
+    },
+]
 
 
 @pytest.fixture(scope="session")
@@ -23,8 +78,34 @@ def anyio_backend() -> str:
 
 
 @pytest_asyncio.fixture
-async def client() -> AsyncGenerator[AsyncClient, None]:
-    """HTTP client bound directly to the ASGI app (no network, no server)."""
+async def db_session() -> AsyncGenerator[AsyncSession, None]:
+    """Create the schema, seed it, and yield a session. Dropped afterwards."""
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    async with SessionLocal() as session:
+        session.add_all([Product(**row) for row in TEST_PRODUCTS])  # type: ignore[arg-type]
+        await session.commit()
+
+    async with SessionLocal() as session:
+        yield session
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+
+
+@pytest_asyncio.fixture
+async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
+    """HTTP client bound to the ASGI app, against the seeded schema."""
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+
+
+@pytest_asyncio.fixture
+async def bare_client() -> AsyncGenerator[AsyncClient, None]:
+    """HTTP client with no schema — for tests that must not depend on seed data."""
     app = create_app()
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:

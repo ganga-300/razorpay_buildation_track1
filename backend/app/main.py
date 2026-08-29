@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
+from app.api.catalog import router as catalog_router
 from app.api.health import router as health_router
 from app.config import settings
 from app.db.session import engine
@@ -61,6 +62,11 @@ def create_app() -> FastAPI:
     # Health lives at the root (not under the versioned prefix) so platform
     # probes have a stable, unversioned URL.
     app.include_router(health_router)
+
+    # The catalog is the agent-facing surface; it stays at a short, stable path
+    # so an external agent can discover it without version negotiation. The
+    # document itself carries `schema_version`.
+    app.include_router(catalog_router)
 
     return app
 
