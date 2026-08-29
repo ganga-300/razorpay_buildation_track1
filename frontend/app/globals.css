@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --surface: 250 250 250;
+    --elevated: 255 255 255;
+    --border: 226 226 230;
+    --ink: 20 20 24;
+    --muted: 110 110 122;
+    --brand: 59 91 219;
+    --ok: 22 133 84;
+    --warn: 176 116 12;
+    --danger: 199 48 48;
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --surface: 14 14 17;
+      --elevated: 24 24 29;
+      --border: 44 44 52;
+      --ink: 240 240 245;
+      --muted: 150 150 162;
+      --brand: 129 152 246;
+      --ok: 74 194 133;
+      --warn: 226 172 65;
+      --danger: 239 106 106;
+    }
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    @apply bg-surface text-ink font-sans;
+  }
+}

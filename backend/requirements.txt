@@ -1,0 +1,35 @@
+# ---- Web framework ----
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+sse-starlette==2.2.1
+
+# ---- Config / validation ----
+pydantic==2.10.4
+pydantic-settings==2.7.0
+python-dotenv==1.0.1
+
+# ---- Database ----
+SQLAlchemy[asyncio]==2.0.36
+alembic==1.14.0
+asyncpg==0.30.0
+aiosqlite==0.20.0
+greenlet==3.1.1
+
+# ---- Cache / idempotency ----
+redis==5.2.1
+
+# ---- Payments (TEST MODE ONLY) ----
+razorpay==1.4.2
+
+# ---- Agent orchestration ----
+langgraph==0.2.60
+anthropic==0.42.0
+
+# ---- HTTP ----
+httpx==0.28.1
+
+# ---- Testing ----
+pytest==8.3.4
+pytest-asyncio==0.25.0
+anyio==4.7.0
