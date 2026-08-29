@@ -117,7 +117,7 @@ async def _load_purchasable_product(
         raise OrderError(
             "insufficient_stock",
             f"Only {product.stock} unit(s) of {product.name!r} are in stock; "
-            f"{quantity} were requested.",
+            f"{quantity} {'was' if quantity == 1 else 'were'} requested.",
             details={"product_id": product_id, "available": product.stock},
         )
 

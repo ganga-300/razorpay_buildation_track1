@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "autobuy-frontend",
+      "runtimeExecutable": "/Users/Ganga/.nvm/versions/node/v22.22.3/bin/npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "frontend",
+      "port": 3000
+    }
+  ]
+}

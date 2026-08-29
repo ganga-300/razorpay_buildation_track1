@@ -199,6 +199,22 @@ Talk to the agent over `POST /chat`, which streams Server-Sent Events —
 `order`, `done`, `error`, `end`. Once the stream has opened, failures arrive as
 `error` events rather than status codes.
 
+### The interface
+
+`/chat` renders **every tool the agent calls inline** — name, arguments, outcome —
+with money-moving calls badged *moves money*. A purchasing agent whose actions
+are invisible is not one anybody should trust with a card. Products and orders
+arrive as structured events and render as cards, not as text the model wrote.
+
+`/dashboard` lists every order the agent created, **including the ones that
+failed**, with the failure code and reason against each. Settled and awaiting-
+payment totals are reported separately: an order awaiting payment is intent, not
+spend, and adding them together would overstate what the agent has done.
+
+Payment verification posts to `/payments/verify` rather than routing back through
+the agent — a signature check is a security control, and a control that only runs
+if a language model decides to call a tool is not a control.
+
 ### Model
 
 Claude `claude-opus-5` via the official `anthropic` SDK with adaptive thinking.
@@ -212,6 +228,6 @@ is deliberately not a dependency — one less wrapper between this code and the 
 - [x] **M0** — Scaffold, env config, health checks
 - [x] **M1** — Agent-readable catalog + search/get tools
 - [x] **M2** — LangGraph purchasing agent + Razorpay order/verify tools
-- [ ] **M3** — Chat UI + merchant dashboard
+- [x] **M3** — Conversational checkout UI + merchant dashboard
 - [ ] **M4** — Guardrails, audit trail, graceful failure
 - [ ] **M5** — Deploy + demo assets

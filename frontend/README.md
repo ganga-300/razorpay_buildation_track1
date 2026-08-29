@@ -18,17 +18,52 @@ Open <http://localhost:3000>. The backend must be running on the URL in
 ```
 app/
 ├── page.tsx        Landing
-├── chat/           Conversational checkout (M3)
-├── dashboard/      Merchant audit trail (M3)
+├── chat/           Conversational checkout
+├── dashboard/      Merchant order view
 └── globals.css     Theme tokens (light + dark)
 components/
-├── ui/             Button · Card · Badge · Table
-├── chat/           ChatWindow · MessageBubble · ApprovalPrompt
-└── dashboard/      AuditTable · SpendMeter · OrderCard
+├── Nav.tsx
+├── ui/             Button · Card · Badge · Table · Spinner
+├── chat/           ChatWindow · MessageBubble · ProductCard · OrderCard
+│                   ToolTrace · Composer · useChat
+└── dashboard/      OrdersTable · SummaryStats
 lib/
 ├── api.ts          Typed fetch client — the only place fetch is called
+├── sse.ts          SSE parser for POST /chat (+ sse.test.ts)
+├── razorpay.ts     Checkout script loader and handoff
+├── orderStatus.ts  Status → label/tone, shared by chat and dashboard
 ├── types.ts        Types mirroring backend Pydantic schemas
 └── cn.ts           Tailwind-aware class merger
+```
+
+## Why a hand-written SSE client
+
+`POST /chat` streams Server-Sent Events, and the browser's native `EventSource`
+only issues **GET** requests with no body. `lib/sse.ts` reads the `fetch`
+response stream and parses the wire format directly.
+
+Frame boundaries are matched with `/\r?\n\r?\n/`, not `"\n\n"`. The SSE spec
+allows LF, CRLF, or CR, and `sse-starlette` emits **CRLF** — splitting on `\n\n`
+buffers the whole stream and then fails to parse the concatenated result, so
+nothing ever renders. `lib/sse.test.ts` covers that case; it fails against the
+naive parser.
+
+## Explainability
+
+`ToolTrace` renders every tool call inline — name, arguments, outcome — with
+money-moving calls badged **moves money**. A purchasing agent whose actions are
+invisible isn't one anyone should trust with a card.
+
+Payment verification posts to `/payments/verify` rather than going back through
+the agent. A signature check is a security control, and a control that only runs
+if a language model chooses to call a tool is not a control.
+
+## Tests
+
+```bash
+npm run test        # vitest
+npm run typecheck   # tsc --noEmit
+npm run lint
 ```
 
 ## Design rules
@@ -47,3 +82,4 @@ lib/
 | `npm run build` | Production build |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | ESLint |
+| `npm run test` | Vitest |

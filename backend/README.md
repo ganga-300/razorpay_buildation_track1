@@ -58,6 +58,9 @@ alembic upgrade head
 | `GET` | `/catalog` | Agent-readable catalog document |
 | `GET` | `/catalog/{id}` | Single product |
 | `POST` | `/chat` | Conversational checkout (Server-Sent Events) |
+| `GET` | `/orders` | All orders, newest first, with summary figures |
+| `GET` | `/orders/{id}` | One order |
+| `POST` | `/payments/verify` | Verify a checkout callback and settle the order |
 | `GET` | `/docs` | OpenAPI UI |
 
 ### `POST /chat` event stream
@@ -191,3 +194,16 @@ call would be invisible to an auditor.
 Stock is decremented only when payment verifies, so an abandoned checkout never
 silently consumes inventory. Re-verification is idempotent, because Razorpay can
 deliver both a checkout callback and a webhook for the same payment.
+
+
+## Why payment verification is not an agent tool
+
+`POST /payments/verify` is deliberately outside the agent loop. Signature
+verification is a security control, and a control whose execution depends on a
+language model choosing to call a tool is not a control. The agent keeps a
+`verify_payment` tool — useful when a buyer says "I've paid" in chat — but the
+checkout callback settles orders deterministically.
+
+The dashboard reports **settled** and **awaiting payment** separately. An order
+awaiting payment is intent, not spend; adding them together would overstate what
+the agent has actually done with the buyer's money.
