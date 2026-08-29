@@ -3,7 +3,7 @@
 import { useCallback, useRef, useState } from "react";
 
 import { streamChat } from "@/lib/sse";
-import type { AgentIntent, Order } from "@/lib/types";
+import type { AgentIntent, BoundCheck, Order } from "@/lib/types";
 import type { ChatItem } from "./types";
 
 let counter = 0;
@@ -26,6 +26,7 @@ export function useChat() {
   const abortRef = useRef<AbortController | null>(null);
   // tool name -> ids of calls still awaiting a result, oldest first
   const pendingTools = useRef<Map<string, string[]>>(new Map());
+  const lastChecks = useRef<BoundCheck[]>([]);
 
   const replaceOrder = useCallback((updated: Order) => {
     setItems((prev) =>
@@ -131,6 +132,33 @@ export function useChat() {
             ]);
             break;
 
+          case "guardrail": {
+            const { blocked, ...decision } = event.data;
+            lastChecks.current = decision.checks;
+            setItems((prev) => [
+              ...prev,
+              { kind: "guardrail", id: nextId("guard"), decision, blocked },
+            ]);
+            break;
+          }
+
+          case "approval_required":
+            setItems((prev) => [
+              ...prev,
+              {
+                kind: "approval",
+                id: nextId("approval"),
+                orderId: event.data.order_id,
+                total: event.data.total,
+                productName: event.data.product.name,
+                reason: event.data.reason,
+                // The guardrail event arrives just before this one in the same
+                // turn, so its checks are the ones that produced this prompt.
+                checks: lastChecks.current,
+              },
+            ]);
+            break;
+
           case "error":
             setItems((prev) => [
               ...prev,
@@ -187,6 +215,7 @@ export function useChat() {
     pendingTools.current = new Map();
     setItems([]);
     setIntent(null);
+    lastChecks.current = [];
     setIsStreaming(false);
   }, []);
 

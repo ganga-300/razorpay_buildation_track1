@@ -26,7 +26,12 @@ from fastapi import APIRouter
 from sse_starlette.sse import EventSourceResponse
 
 from app.agents.llm import get_llm_client
-from app.agents.purchasing_agent import AgentDeps, run_turn
+from app.agents.purchasing_agent import (
+    AGENT_EVENT_TYPES,
+    INTERNAL_EVENT_TYPES,
+    AgentDeps,
+    run_turn,
+)
 from app.config import settings
 from app.db.session import SessionLocal
 from app.schemas.chat import ChatRequest
@@ -36,9 +41,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["chat"])
 
-# Events forwarded to the browser. `state` is deliberately excluded: it carries
-# the full transcript, including thinking blocks, which the UI has no use for.
-CLIENT_EVENTS = {"intent", "message", "tool_call", "tool_result", "products", "order", "done"}
+# What reaches the browser: everything the agent emits, minus the internal
+# events. Derived rather than duplicated — a hand-maintained copy of this list
+# silently dropped `guardrail` and `approval_required` once already.
+CLIENT_EVENTS = AGENT_EVENT_TYPES - INTERNAL_EVENT_TYPES
 
 
 def _sse(event: str, payload: dict[str, Any]) -> dict[str, str]:

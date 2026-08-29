@@ -176,3 +176,51 @@ async def test_an_overlong_message_is_rejected(
 ) -> None:
     resp = await client.post("/chat", json={"message": "x" * 5000})
     assert resp.status_code == 422
+
+
+# --------------------------------------------------------------------------
+# The guardrail and approval gate, end to end
+# --------------------------------------------------------------------------
+
+
+async def test_the_approval_gate_reaches_the_browser(
+    client: AsyncClient, agent: ScriptedLLM, fake_razorpay: FakeRazorpay
+) -> None:
+    """End to end: a gated order must stream both the guardrail and the prompt."""
+    agent._turns = [
+        response(tool_use_block("t1", "create_order", {"product_id": "prd-mouse"})),
+        response(text_block("That needs your approval.")),
+    ]
+    frames = await sse(client, message="buy the mouse")
+
+    assert "guardrail" in names(frames)
+    assert "approval_required" in names(frames)
+
+    guardrail = payload(frames, "guardrail")
+    assert guardrail["blocked"] is False
+    assert {c["name"] for c in guardrail["checks"]} == {
+        "per_transaction_cap",
+        "daily_cap",
+        "auto_approve_limit",
+    }
+
+    approval = payload(frames, "approval_required")
+    assert approval["total"]["display"] == "₹1,299.00"
+    assert approval["order_id"].startswith("ord-")
+
+
+async def test_a_blocked_order_streams_the_bound_that_stopped_it(
+    client: AsyncClient, agent: ScriptedLLM, fake_razorpay: FakeRazorpay
+) -> None:
+    agent._turns = [
+        response(tool_use_block("t1", "create_order", {"product_id": "prd-headphones"})),
+        response(text_block("I can't buy that.")),
+    ]
+    frames = await sse(client, message="buy the headphones")
+
+    guardrail = payload(frames, "guardrail")
+    assert guardrail["blocked"] is True
+    failed = [c["name"] for c in guardrail["checks"] if not c["passed"]]
+    assert failed[0] == "per_transaction_cap"
+    # A refusal is not an approval prompt — there is nothing to approve.
+    assert "approval_required" not in names(frames)

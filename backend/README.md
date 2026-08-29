@@ -61,6 +61,10 @@ alembic upgrade head
 | `GET` | `/orders` | All orders, newest first, with summary figures |
 | `GET` | `/orders/{id}` | One order |
 | `POST` | `/payments/verify` | Verify a checkout callback and settle the order |
+| `GET` | `/audit` | Full audit trail (filter by `order_id`, `decision`, `outcome`, `action`) |
+| `GET` | `/approvals` | Orders waiting on a human |
+| `POST` | `/orders/{id}/approve` | Approve a gated order and execute it |
+| `POST` | `/orders/{id}/decline` | Decline a gated order |
 | `GET` | `/docs` | OpenAPI UI |
 
 ### `POST /chat` event stream
@@ -207,3 +211,51 @@ checkout callback settles orders deterministically.
 The dashboard reports **settled** and **awaiting payment** separately. An order
 awaiting payment is intent, not spend; adding them together would overstate what
 the agent has actually done with the buyer's money.
+
+
+## Guardrails and the audit trail
+
+`services/guardrails.py` returns one of three verdicts, each carrying every
+bound it checked so the decision can be *explained*, not merely enforced:
+
+| Verdict | Condition |
+|---|---|
+| `allow` | at or below `AUTO_APPROVE_LIMIT_MINOR` |
+| `require_approval` | above the auto-approve limit, within both caps |
+| `block` | breaches `PER_TRANSACTION_CAP_MINOR` or `DAILY_CAP_MINOR` |
+
+Hard caps are evaluated **before** the approval threshold, so a human can never
+be prompted to authorise past a merchant limit.
+
+The daily cap counts orders in `created`, `awaiting_payment`, or `paid` — a
+created Razorpay order is a live commitment. Counting only `paid` would let the
+agent open unlimited orders and stay under the cap forever; counting `blocked`
+or `failed` would charge the buyer's budget for spend that never happened.
+
+`services/audit_logger.py` writes an entry **before** the action and updates it
+after. Entries are committed separately from the business transaction so a
+rollback of the order cannot take the evidence with it.
+
+### The gate lives in the service, not the agent
+
+`services/orders.create_order()` is the single choke point every caller passes
+through — the agent tool, the approval endpoint, and anything added later. A gate
+in the agent could be bypassed by calling the service directly.
+
+Approval is a POST against a specific order id, never the model interpreting
+"yes" in the transcript, and caps are re-checked at approval time.
+
+## Retry policy
+
+`PROVIDER_MAX_ATTEMPTS=2` with exponential backoff from
+`PROVIDER_RETRY_BASE_DELAY`. Only errors flagged `retryable` are retried; a
+deterministic rejection is not. Attempts are counted on both the order and the
+audit entry, so a retry is visible in the trail rather than looking like one
+clean call. A failed order **releases** its idempotency key, since nothing was
+charged and a genuine retry must be able to proceed.
+
+## Idempotency
+
+`services/idempotency.py` uses Redis (`SET NX`) when `REDIS_URL` is set and an
+in-process store otherwise. The unique index on `orders.idempotency_key` is the
+backstop that makes the multi-worker case safe regardless.

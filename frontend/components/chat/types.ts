@@ -1,4 +1,11 @@
-import type { ErrorPayload, Order, Product } from "@/lib/types";
+import type {
+  BoundCheck,
+  ErrorPayload,
+  GuardrailDecision,
+  Money,
+  Order,
+  Product,
+} from "@/lib/types";
 import type { ToolStatus } from "./ToolTrace";
 
 /** One rendered entry in the transcript. */
@@ -16,4 +23,19 @@ export type ChatItem =
     }
   | { kind: "products"; id: string; products: Product[] }
   | { kind: "order"; id: string; order: Order }
+  | {
+      kind: "guardrail";
+      id: string;
+      decision: GuardrailDecision;
+      blocked: boolean;
+    }
+  | {
+      kind: "approval";
+      id: string;
+      orderId: string;
+      total: Money;
+      productName: string;
+      reason: string | null;
+      checks: BoundCheck[];
+    }
   | { kind: "error"; id: string; error: ErrorPayload };

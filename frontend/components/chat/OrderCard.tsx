@@ -27,7 +27,13 @@ export function OrderCard({
   order: Order;
   onSettled?: (order: Order) => void;
 }) {
-  const [order, setOrder] = useState<Order>(initial);
+  // The prop is the source of truth: when the order is approved elsewhere in
+  // the transcript, the parent hands down an updated one. Seeding useState from
+  // the prop would freeze this card at the value it first rendered with, so a
+  // local copy is kept only for the settlement this card performed itself.
+  const [settled, setSettled] = useState<Order | null>(null);
+  const order = settled ?? initial;
+
   const [state, setState] = useState<PayState>("idle");
   const [error, setError] = useState<string | null>(null);
 
@@ -50,10 +56,10 @@ export function OrderCard({
       }
 
       setState("verifying");
-      const { order: settled } = await verifyPayment(result);
-      setOrder(settled);
+      const { order: paid } = await verifyPayment(result);
+      setSettled(paid);
       setState("done");
-      onSettled?.(settled);
+      onSettled?.(paid);
     } catch (cause) {
       const message =
         cause instanceof ApiError

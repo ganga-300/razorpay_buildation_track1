@@ -60,6 +60,13 @@ class Settings(BaseSettings):
     # keeps calling tools without concluding must terminate, not spin.
     agent_max_iterations: int = 8
 
+    # ---- Retry ----
+    # A retryable provider failure is retried once. Deliberately once: a payment
+    # gateway that is failing does not usually recover in milliseconds, and every
+    # extra attempt widens the window in which a charge could land twice.
+    provider_max_attempts: int = 2
+    provider_retry_base_delay: float = 0.5
+
     # ---- Guardrails (wired up fully in Milestone 4) ----
     # Amounts are in the currency's minor unit (paise for INR).
     auto_approve_limit_minor: int = Field(default=50_000)      # ₹500.00

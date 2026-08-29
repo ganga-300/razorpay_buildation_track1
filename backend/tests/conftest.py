@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Generator
 from typing import TYPE_CHECKING
 
 # Force a disposable in-memory DB and known-safe config BEFORE app import.
@@ -23,7 +23,9 @@ from app.db.base import Base
 from app.db.models import Product
 from app.db.session import SessionLocal, engine
 from app.main import create_app
+from app.config import settings
 from app.services import orders as orders_service
+from app.services.idempotency import reset_store
 
 # A deliberately small catalog spanning the guardrail bands, so tests can assert
 # on price filtering and stock filtering without depending on the seed script.
@@ -125,3 +127,30 @@ async def bare_client() -> AsyncGenerator[AsyncClient, None]:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
+
+
+@pytest.fixture(autouse=True)
+def _isolate_idempotency_store() -> "Generator[None, None, None]":
+    """The store is a process-global; a key left over would leak between tests."""
+    reset_store()
+    yield
+    reset_store()
+
+
+@pytest.fixture(autouse=True)
+def _fast_retries(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the retry backoff from adding real seconds to the suite."""
+    monkeypatch.setattr(settings, "provider_retry_base_delay", 0.0)
+
+
+@pytest.fixture
+def generous_limits(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Raise every cap out of the way.
+
+    For tests about provider mechanics — amounts, retries, idempotency — where
+    the gate is not what is under test. Guardrail behaviour has its own tests
+    that run against the real configured limits.
+    """
+    monkeypatch.setattr(settings, "auto_approve_limit_minor", 10_000_00)
+    monkeypatch.setattr(settings, "per_transaction_cap_minor", 50_000_00)
+    monkeypatch.setattr(settings, "daily_cap_minor", 100_000_00)

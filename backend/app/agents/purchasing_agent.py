@@ -58,6 +58,29 @@ TOOL_PHASES: dict[str, str] = {
 
 PHASE_NODES = ("search_catalog", "create_order", "verify_payment")
 
+# Every event type `run_turn` can emit. The SSE layer derives what it forwards
+# from this set, so adding an event in one place and forgetting the other is not
+# possible — a new type registered here reaches the browser automatically, and
+# one that is emitted but never registered fails `test_every_emitted_event_is_registered`.
+AGENT_EVENT_TYPES = frozenset(
+    {
+        "intent",
+        "message",
+        "tool_call",
+        "tool_result",
+        "products",
+        "order",
+        "guardrail",
+        "approval_required",
+        "done",
+        "state",
+    }
+)
+
+# Never forwarded to the browser: `state` carries the full transcript, including
+# thinking blocks, which the UI has no use for.
+INTERNAL_EVENT_TYPES = frozenset({"state"})
+
 
 class AgentState(TypedDict, total=False):
     """State threaded through the graph for one chat turn."""
@@ -234,6 +257,11 @@ def build_graph(deps: AgentDeps) -> Any:
                 # injection attribute an order to someone else's thread.
                 if call.name == "create_order":
                     arguments["conversation_id"] = deps.conversation_id
+                    # Derived from the model's own tool_use id, so an internal
+                    # retry of this exact call reuses the key and cannot produce
+                    # a second charge, while a genuine second purchase gets a
+                    # new id and proceeds normally.
+                    arguments["idempotency_key"] = f"{deps.conversation_id}:{call.id}"
 
                 envelope = await execute_tool(call.name, deps.session, arguments)
 
@@ -356,6 +384,13 @@ def _as_tool_content(envelope: dict[str, Any]) -> str:
 def _domain_events(tool_name: str, envelope: dict[str, Any]) -> list[dict[str, Any]]:
     """Structured events the UI renders as cards rather than as text."""
     if not envelope.get("ok"):
+        # A refusal is as much a result as a purchase. When the guardrails
+        # blocked the action, the bounds that were checked travel to the UI so
+        # the buyer sees *which* limit stopped it, not just that something did.
+        error = envelope.get("error") or {}
+        guardrail = (error.get("details") or {}).get("guardrail")
+        if guardrail:
+            return [_event("guardrail", **guardrail, blocked=True)]
         return []
 
     data = envelope.get("data") or {}
@@ -366,7 +401,25 @@ def _domain_events(tool_name: str, envelope: dict[str, Any]) -> list[dict[str, A
         product = data.get("product")
         return [_event("products", products=[product])] if product else []
     if tool_name in {"create_order", "verify_payment"}:
-        return [_event("order", order=data)]
+        events: list[dict[str, Any]] = []
+        if data.get("guardrail"):
+            events.append(_event("guardrail", **data["guardrail"], blocked=False))
+        events.append(_event("order", order=data))
+        if data.get("approval_required"):
+            # The UI renders an explicit Approve/Decline control. Approval is
+            # never inferred from the buyer typing "yes" — see the approval
+            # endpoint for why.
+            events.append(
+                _event(
+                    "approval_required",
+                    order_id=data["order_id"],
+                    audit_id=data.get("audit_id"),
+                    total=data.get("total"),
+                    product=data.get("product"),
+                    reason=(data.get("guardrail") or {}).get("reason"),
+                )
+            )
+        return events
     return []
 
 

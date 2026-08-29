@@ -24,8 +24,7 @@ pytestmark = pytest.mark.asyncio
 
 
 async def test_create_order_sends_the_catalog_price_in_minor_units(
-    db_session: AsyncSession, fake_razorpay: FakeRazorpay
-) -> None:
+    db_session: AsyncSession, fake_razorpay: FakeRazorpay, generous_limits: None) -> None:
     """The amount charged comes from the catalog, never from the caller."""
     result = await create_order(db_session, product_id="prd-mouse", quantity=2)
 
@@ -43,8 +42,7 @@ async def test_create_order_sends_the_catalog_price_in_minor_units(
 
 
 async def test_create_order_persists_before_calling_the_provider(
-    db_session: AsyncSession, fake_razorpay: FakeRazorpay
-) -> None:
+    db_session: AsyncSession, fake_razorpay: FakeRazorpay, generous_limits: None) -> None:
     result = await create_order(db_session, product_id="prd-mouse", quantity=1)
 
     order = await db_session.get(Order, result["order_id"])
@@ -133,8 +131,7 @@ async def test_invalid_quantities_are_refused(
 
 
 async def test_provider_failure_still_leaves_an_auditable_order(
-    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
-) -> None:
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch, generous_limits: None) -> None:
     """The whole point of persisting before the provider call."""
     from app.services import orders as orders_service
 
@@ -159,8 +156,7 @@ async def test_provider_failure_still_leaves_an_auditable_order(
 
 
 async def test_a_rejected_request_is_not_marked_retryable(
-    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
-) -> None:
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch, generous_limits: None) -> None:
     from app.services import orders as orders_service
 
     failing = FakeRazorpay(
@@ -179,8 +175,7 @@ async def test_a_rejected_request_is_not_marked_retryable(
 
 
 async def test_repeating_an_idempotency_key_does_not_charge_twice(
-    db_session: AsyncSession, fake_razorpay: FakeRazorpay
-) -> None:
+    db_session: AsyncSession, fake_razorpay: FakeRazorpay, generous_limits: None) -> None:
     first = await create_order(
         db_session, product_id="prd-mouse", quantity=1, idempotency_key="key-1"
     )
@@ -199,8 +194,7 @@ async def test_repeating_an_idempotency_key_does_not_charge_twice(
 
 
 async def test_verifying_a_payment_settles_the_order_and_decrements_stock(
-    db_session: AsyncSession, fake_razorpay: FakeRazorpay
-) -> None:
+    db_session: AsyncSession, fake_razorpay: FakeRazorpay, generous_limits: None) -> None:
     created = await create_order(db_session, product_id="prd-headphones", quantity=2)
 
     before = await db_session.get(Product, "prd-headphones")
@@ -221,8 +215,7 @@ async def test_verifying_a_payment_settles_the_order_and_decrements_stock(
 
 
 async def test_stock_is_only_decremented_once_payment_verifies(
-    db_session: AsyncSession, fake_razorpay: FakeRazorpay
-) -> None:
+    db_session: AsyncSession, fake_razorpay: FakeRazorpay, generous_limits: None) -> None:
     """An abandoned checkout must not silently consume inventory."""
     await create_order(db_session, product_id="prd-headphones", quantity=2)
     product = await db_session.get(Product, "prd-headphones")
@@ -230,8 +223,7 @@ async def test_stock_is_only_decremented_once_payment_verifies(
 
 
 async def test_reverifying_a_paid_order_is_idempotent(
-    db_session: AsyncSession, fake_razorpay: FakeRazorpay
-) -> None:
+    db_session: AsyncSession, fake_razorpay: FakeRazorpay, generous_limits: None) -> None:
     """Razorpay can deliver both a checkout callback and a webhook."""
     created = await create_order(db_session, product_id="prd-headphones", quantity=1)
     args = {
@@ -248,8 +240,7 @@ async def test_reverifying_a_paid_order_is_idempotent(
 
 
 async def test_a_forged_signature_fails_the_order(
-    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
-) -> None:
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch, generous_limits: None) -> None:
     """A bad signature must be distinguishable from a declined card."""
     from app.services import orders as orders_service
 

@@ -12,8 +12,11 @@ from typing import Any
 
 from enum import StrEnum
 
+from datetime import datetime
+
 from sqlalchemy import (
     Boolean,
+    DateTime,
     CheckConstraint,
     Enum as SAEnum,
     ForeignKey,
@@ -39,6 +42,10 @@ __all__ = [
     "Order",
     "OrderStatus",
     "Conversation",
+    "AuditLog",
+    "AuditAction",
+    "AuditDecision",
+    "AuditOutcome",
 ]
 
 
@@ -193,3 +200,106 @@ class Conversation(Base, TimestampMixin):
 
     def __repr__(self) -> str:  # pragma: no cover — debugging aid
         return f"<Conversation {self.id} turns={len(self.messages or [])}>"
+
+
+class AuditAction(StrEnum):
+    """The money action an audit entry describes."""
+
+    CREATE_ORDER = "create_order"
+    VERIFY_PAYMENT = "verify_payment"
+
+
+class AuditDecision(StrEnum):
+    """What the guardrails decided, before the action ran."""
+
+    ALLOW = "allow"
+    REQUIRE_APPROVAL = "require_approval"
+    BLOCK = "block"
+
+
+class AuditOutcome(StrEnum):
+    """What actually happened after the decision.
+
+    `PENDING` means the row was written but the action has not finished — the
+    state every entry starts in, because the record is created *before* the
+    money moves. An entry stuck in PENDING is itself a finding: it means the
+    process died mid-action.
+    """
+
+    PENDING = "pending"
+    AWAITING_APPROVAL = "awaiting_approval"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    BLOCKED = "blocked"
+    DECLINED = "declined"
+    EXPIRED = "expired"
+
+
+class AuditLog(Base, TimestampMixin):
+    """An immutable-by-convention record of one attempted money action.
+
+    Written **before** the action executes and updated after, so a crash mid-flight
+    still leaves evidence that the agent was about to spend. Rows are never
+    deleted; a superseded decision is updated in place with its outcome, and the
+    `checks` column keeps the exact bounds that were evaluated at the time — not
+    the bounds as configured today.
+    """
+
+    __tablename__ = "audit_logs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+
+    agent_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    action: Mapped[AuditAction] = mapped_column(
+        SAEnum(AuditAction, native_enum=False, length=32), nullable=False, index=True
+    )
+    decision: Mapped[AuditDecision] = mapped_column(
+        SAEnum(AuditDecision, native_enum=False, length=32), nullable=False, index=True
+    )
+    outcome: Mapped[AuditOutcome] = mapped_column(
+        SAEnum(AuditOutcome, native_enum=False, length=32),
+        nullable=False,
+        default=AuditOutcome.PENDING,
+        index=True,
+    )
+
+    conversation_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    order_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    product_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    product_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    quantity: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    amount_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="INR")
+
+    # Every bound evaluated, with the limit and the observed value at the time.
+    # Snapshotted rather than recomputed so the record stays truthful after the
+    # configured caps change.
+    checks: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONType, nullable=False, default=list
+    )
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+    # Human approval, when the amount crossed the auto-approve threshold.
+    approved_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    failure_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+
+    __table_args__ = (
+        Index("ix_audit_created_desc", "created_at"),
+        Index("ix_audit_decision_outcome", "decision", "outcome"),
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover — debugging aid
+        return (
+            f"<AuditLog {self.id} {self.action}/{self.decision}"
+            f"/{self.outcome} {self.amount_minor}{self.currency}>"
+        )

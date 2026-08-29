@@ -199,6 +199,81 @@ Talk to the agent over `POST /chat`, which streams Server-Sent Events —
 `order`, `done`, `error`, `end`. Once the stream has opened, failures arrive as
 `error` events rather than status codes.
 
+## Bounded, gated, audited
+
+Every money action runs the same sequence, and the ordering is load-bearing:
+
+```
+1. validate the product, compute the amount locally
+2. reserve the idempotency key
+3. guardrails.evaluate()  ->  allow | require_approval | block
+4. write the audit entry  <-  BEFORE anything irreversible
+5. persist the local Order row
+6. only now call Razorpay, retrying once on a retryable failure
+7. update the order AND the audit entry with what happened
+```
+
+**Step 4 is why a refusal is as well-recorded as a success.** An audit trail
+written *after* the fact has no record of the most dangerous case — the process
+dying mid-charge. Writing first inverts that: an entry left `pending` is itself
+the finding.
+
+### The three verdicts
+
+| Amount | Verdict | What happens |
+|---|---|---|
+| ≤ ₹500 | `allow` | executes immediately |
+| ₹500 – ₹2,000 | `require_approval` | order held at `pending_approval`, nothing charged, human must click Approve |
+| > ₹2,000 | `block` | refused outright; Razorpay is never contacted |
+
+**Hard caps are checked before the approval threshold.** If the order were
+reversed, a buyer could be prompted to authorise an amount the merchant has
+forbidden — and a cap a human can click through is not a cap.
+
+**Approval is a POST to `/orders/{id}/approve`, never the model reading "yes".**
+A confirmation inferred from chat text is one a prompt injection can forge. Caps
+are also re-evaluated at approval time: an approval is permission for an amount,
+not a bypass of the daily cap.
+
+### One failure, handled gracefully
+
+A retryable provider failure is retried **once** with backoff, then gives up.
+Deliberately once — a gateway that is failing rarely recovers in milliseconds,
+and every extra attempt widens the window for a double charge. A deterministic
+rejection is not retried at all.
+
+What the buyer sees: *"The payment provider timed out. I retried once with a
+backoff and it failed again, so I stopped rather than risk a double charge.
+Nothing was charged and the order is recorded as failed."*
+
+What the trail records:
+
+```
+aud-250f6c4c2f78  create_order  ₹1,799.00
+  decision=require_approval -> outcome=failed   attempts=2   by=buyer
+  failure: provider_unavailable — Razorpay gateway timed out
+    [ok  ] per_transaction_cap    ₹1,799.00 / ₹2,000.00
+    [ok  ] daily_cap              ₹3,098.00 / ₹10,000.00
+    [FAIL] auto_approve_limit     ₹1,799.00 / ₹500.00
+```
+
+`attempts=2` is the retry. The bounds are **snapshotted at decision time**, not
+recomputed, so the record stays truthful after the configured caps change.
+
+### No double charges
+
+Three overlapping layers, because one is not enough:
+
+1. **Redis** reserves the key before the provider call, so a concurrent retry is
+   refused rather than racing. Falls back to an in-process store when `REDIS_URL`
+   is unset — correct for one worker.
+2. **A unique index** on `orders.idempotency_key`, which holds even if Redis is
+   flushed or unavailable.
+3. **A replay lookup** so a repeat returns the original order instead of an error.
+
+The key is derived from the model's own `tool_use` id, so an internal retry of
+one call reuses it while a genuine second purchase gets a new one.
+
 ### The interface
 
 `/chat` renders **every tool the agent calls inline** — name, arguments, outcome —
@@ -229,5 +304,5 @@ is deliberately not a dependency — one less wrapper between this code and the 
 - [x] **M1** — Agent-readable catalog + search/get tools
 - [x] **M2** — LangGraph purchasing agent + Razorpay order/verify tools
 - [x] **M3** — Conversational checkout UI + merchant dashboard
-- [ ] **M4** — Guardrails, audit trail, graceful failure
+- [x] **M4** — Spend caps, approval gating, audit trail, graceful failure
 - [ ] **M5** — Deploy + demo assets

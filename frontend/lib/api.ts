@@ -7,6 +7,8 @@
  */
 
 import type {
+  ApprovalResponse,
+  AuditListResponse,
   HealthResponse,
   Order,
   OrderListResponse,
@@ -89,5 +91,42 @@ export function verifyPayment(payload: {
   return apiFetch<VerifyPaymentResponse>("/payments/verify", {
     method: "POST",
     body: JSON.stringify(payload),
+  });
+}
+
+export interface AuditFilters {
+  order_id?: string;
+  decision?: string;
+  outcome?: string;
+  action?: string;
+}
+
+export function getAudit(filters: AuditFilters = {}): Promise<AuditListResponse> {
+  const query = new URLSearchParams(
+    Object.entries(filters).filter(([, v]) => Boolean(v)) as [string, string][],
+  ).toString();
+  return apiFetch<AuditListResponse>(`/audit${query ? `?${query}` : ""}`, {
+    cache: "no-store",
+  });
+}
+
+export function approveOrder(
+  orderId: string,
+  actor = "buyer",
+): Promise<ApprovalResponse> {
+  return apiFetch<ApprovalResponse>(`/orders/${orderId}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ actor }),
+  });
+}
+
+export function declineOrder(
+  orderId: string,
+  actor = "buyer",
+  reason?: string,
+): Promise<ApprovalResponse> {
+  return apiFetch<ApprovalResponse>(`/orders/${orderId}/decline`, {
+    method: "POST",
+    body: JSON.stringify({ actor, reason: reason ?? null }),
   });
 }

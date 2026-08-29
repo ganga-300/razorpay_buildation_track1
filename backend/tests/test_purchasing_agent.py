@@ -47,7 +47,18 @@ def kinds(events: list[dict[str, Any]]) -> list[str]:
 
 
 def first(events: list[dict[str, Any]], kind: str) -> dict[str, Any]:
-    return next(e for e in events if e["type"] == kind)
+    """First event of a kind.
+
+    Raises AssertionError rather than StopIteration: inside an async test a bare
+    StopIteration surfaces as an opaque "coroutine raised StopIteration" with no
+    hint of which event was missing.
+    """
+    for event in events:
+        if event["type"] == kind:
+            return event
+    raise AssertionError(
+        f"no {kind!r} event; got {[e['type'] for e in events]}"
+    )
 
 
 # --------------------------------------------------------------------------
@@ -148,8 +159,7 @@ async def test_tool_results_are_batched_into_one_user_message(
 
 
 async def test_create_order_routes_through_the_money_node(
-    db_session: AsyncSession, fake_razorpay: FakeRazorpay
-) -> None:
+    db_session: AsyncSession, fake_razorpay: FakeRazorpay, generous_limits: None) -> None:
     llm = ScriptedLLM(
         intents=["purchase"],
         turns=[
@@ -173,8 +183,7 @@ async def test_create_order_routes_through_the_money_node(
 
 
 async def test_the_agent_not_the_model_sets_the_conversation_id(
-    db_session: AsyncSession, fake_razorpay: FakeRazorpay
-) -> None:
+    db_session: AsyncSession, fake_razorpay: FakeRazorpay, generous_limits: None) -> None:
     """Otherwise a prompt injection could attribute an order to another thread."""
     llm = ScriptedLLM(
         intents=["purchase"],
@@ -201,8 +210,7 @@ async def test_the_agent_not_the_model_sets_the_conversation_id(
 
 
 async def test_payment_verification_settles_the_order(
-    db_session: AsyncSession, fake_razorpay: FakeRazorpay
-) -> None:
+    db_session: AsyncSession, fake_razorpay: FakeRazorpay, generous_limits: None) -> None:
     llm = ScriptedLLM(
         intents=["purchase", "verify"],
         turns=[

@@ -24,9 +24,11 @@ app/
 components/
 ├── Nav.tsx
 ├── ui/             Button · Card · Badge · Table · Spinner
+├── BoundChecks.tsx Bounds evaluated, shared by chat and audit trail
 ├── chat/           ChatWindow · MessageBubble · ProductCard · OrderCard
-│                   ToolTrace · Composer · useChat
-└── dashboard/      OrdersTable · SummaryStats
+│                   ToolTrace · ApprovalPrompt · GuardrailNotice
+│                   Composer · useChat
+└── dashboard/      OrdersTable · AuditTable · SpendMeter · SummaryStats
 lib/
 ├── api.ts          Typed fetch client — the only place fetch is called
 ├── sse.ts          SSE parser for POST /chat (+ sse.test.ts)
@@ -83,3 +85,15 @@ npm run lint
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | ESLint |
 | `npm run test` | Vitest |
+
+
+## The approval gate
+
+`ApprovalPrompt` calls `POST /orders/{id}/approve`. Approval is tied to a
+specific order id and is never inferred from the buyer typing "yes" — a
+confirmation the model reads out of chat text is one a prompt injection can
+forge; a button press is an action only the person at the keyboard can take.
+
+`GuardrailNotice` and `BoundChecks` render the bounds that were evaluated, with
+the observed value against each limit. That is what turns "blocked" into an
+explanation.

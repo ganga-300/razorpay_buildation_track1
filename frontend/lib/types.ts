@@ -104,6 +104,94 @@ export interface VerifyPaymentResponse {
   order: Order;
 }
 
+// ------------------------------------------------------------ guardrails
+
+/** One bound as it was evaluated, with the values seen at that moment. */
+export interface BoundCheck {
+  name: string;
+  limit_minor: number;
+  observed_minor: number;
+  passed: boolean;
+  description: string;
+  limit_display: string;
+  observed_display: string;
+}
+
+export type GuardrailVerdict = "allow" | "require_approval" | "block";
+
+export interface GuardrailDecision {
+  verdict: GuardrailVerdict;
+  reason: string;
+  amount: Money;
+  checks: BoundCheck[];
+}
+
+// ----------------------------------------------------------------- audit
+
+export type AuditDecision = "allow" | "require_approval" | "block";
+
+export type AuditOutcome =
+  | "pending"
+  | "awaiting_approval"
+  | "succeeded"
+  | "failed"
+  | "blocked"
+  | "declined"
+  | "expired";
+
+export interface AuditEntry {
+  id: string;
+  agent_id: string;
+  action: string;
+  decision: AuditDecision;
+  outcome: AuditOutcome;
+  conversation_id: string | null;
+  order_id: string | null;
+  product: { id: string; name: string } | null;
+  quantity: number | null;
+  amount: Money;
+  checks: BoundCheck[];
+  reason: string;
+  approved_by: string | null;
+  approved_at: string | null;
+  failure: { code: string | null; reason: string | null } | null;
+  attempts: number;
+  duration_ms: number | null;
+  created_at: string | null;
+}
+
+export interface AuditSummary {
+  total: number;
+  by_decision: Partial<Record<AuditDecision, number>>;
+  by_outcome: Partial<Record<AuditOutcome, number>>;
+  blocked_amount: Money;
+  approved_amount: Money;
+}
+
+export interface BudgetSnapshot {
+  window_hours: number;
+  currency: string;
+  spent: Money;
+  cap: Money;
+  remaining: Money;
+  used_fraction: number;
+  auto_approve_limit: Money;
+  per_transaction_cap: Money;
+}
+
+export interface AuditListResponse {
+  count: number;
+  summary: AuditSummary;
+  budget: BudgetSnapshot;
+  entries: AuditEntry[];
+}
+
+export interface ApprovalResponse {
+  order: Order;
+  audit_id: string | null;
+  approved_by: string | null;
+}
+
 // ----------------------------------------------------------- chat / SSE
 
 export type AgentIntent = "browse" | "purchase" | "verify" | "cancel" | "other";
@@ -133,6 +221,20 @@ export type ChatEvent =
     }
   | { event: "products"; data: { products: Product[] } }
   | { event: "order"; data: { order: Order } }
+  | {
+      event: "guardrail";
+      data: GuardrailDecision & { blocked: boolean };
+    }
+  | {
+      event: "approval_required";
+      data: {
+        order_id: string;
+        audit_id: string | null;
+        total: Money;
+        product: { id: string; name: string };
+        reason: string | null;
+      };
+    }
   | { event: "done"; data: { text: string; intent: AgentIntent | null } }
   | { event: "error"; data: ErrorPayload }
   | { event: "end"; data: { conversation_id: string } };

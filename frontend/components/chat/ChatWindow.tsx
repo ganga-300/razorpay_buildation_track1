@@ -5,7 +5,9 @@ import { useEffect, useRef } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
+import { ApprovalPrompt } from "./ApprovalPrompt";
 import { Composer } from "./Composer";
+import { GuardrailNotice } from "./GuardrailNotice";
 import { MessageBubble } from "./MessageBubble";
 import { OrderCard } from "./OrderCard";
 import { ProductGrid } from "./ProductCard";
@@ -96,6 +98,23 @@ function ChatItemView({
 
     case "order":
       return <OrderCard order={item.order} onSettled={onSettled} />;
+
+    case "guardrail":
+      return (
+        <GuardrailNotice decision={item.decision} blocked={item.blocked} />
+      );
+
+    case "approval":
+      return (
+        <ApprovalPrompt
+          orderId={item.orderId}
+          total={item.total}
+          productName={item.productName}
+          reason={item.reason}
+          checks={item.checks}
+          onResolved={onSettled}
+        />
+      );
 
     case "error":
       return (

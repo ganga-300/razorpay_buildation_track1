@@ -36,7 +36,11 @@ export function Table<T>({
   }
 
   return (
-    <div className={cn("w-full overflow-x-auto", className)}>
+    // `contain: paint` keeps this scroller's overflow out of the root
+    // scrollWidth. Without it a wide table inflates the document by the
+    // overflow amount and the whole page picks up a stray horizontal scroll,
+    // even though the table itself is clipped and scrolls correctly.
+    <div className={cn("w-full overflow-x-auto [contain:paint]", className)}>
       <table className="w-full border-collapse text-sm">
         <thead>
           <tr className="border-b border-border">
