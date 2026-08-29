@@ -57,7 +57,29 @@ alembic upgrade head
 | `GET` | `/health/live` | Liveness probe |
 | `GET` | `/catalog` | Agent-readable catalog document |
 | `GET` | `/catalog/{id}` | Single product |
+| `POST` | `/chat` | Conversational checkout (Server-Sent Events) |
 | `GET` | `/docs` | OpenAPI UI |
+
+### `POST /chat` event stream
+
+Body: `{"message": "...", "conversation_id": "conv-..."}` — omit the id to start
+a thread; it comes back in the first event.
+
+| Event | Payload |
+|---|---|
+| `conversation` | `{conversation_id}` — always first |
+| `intent` | `{intent}` — browse / purchase / verify / cancel / other |
+| `message` | `{text}` — agent prose |
+| `tool_call` | `{tool, arguments, mutates_money}` |
+| `tool_result` | `{tool, ok, error}` |
+| `products` | `{products: [...]}` — render as cards |
+| `order` | `{order: {...}}` — render as an order card |
+| `done` | `{text, intent}` |
+| `error` | `{code, message, retryable}` |
+| `end` | `{conversation_id}` — always last |
+
+Errors after the stream opens arrive as `error` events, not status codes — once
+the response has begun there is no status left to change.
 
 ### Catalog filters
 
@@ -91,6 +113,8 @@ Tools live in `app/tools/` and self-register on import of the package.
 |---|---|---|
 | `search_catalog` | no | Search products; also returns the purchase policy |
 | `get_product` | no | Fetch one product by id |
+| `create_order` | **yes** | Create a Razorpay order (test mode) |
+| `verify_payment` | **yes** | Verify a payment signature and settle the order |
 
 Two invariants hold for every tool:
 
@@ -111,3 +135,59 @@ pointless network hop.
 ```bash
 .venv/bin/python -m pytest
 ```
+
+
+## The purchasing agent
+
+```
+START -> parse_intent -> agent -> [dispatch] -> search_catalog
+                          ^                  -> create_order      (money)
+                          |                  -> verify_payment    (money)
+                          |                        |
+                          +---- collect_results <--+
+                          |
+                          +-> finish -> END
+```
+
+**Money tools get their own nodes.** That is the design, not an accident. A
+generic "run whatever the model asked for" node would make the spend gate a
+conditional buried in an executor; separate nodes make it structural, so the
+Milestone 4 guardrail has exactly one place to live and cannot be bypassed by a
+tool being routed elsewhere. `_validate_tool_coverage()` fails at import if a
+money tool is ever routed to a non-gated node, and a test asserts it.
+
+Bounds that hold regardless of what the model does:
+
+- `AGENT_MAX_ITERATIONS` caps tool rounds per turn — a looping model terminates.
+- Every tool result is an envelope, so one failing tool degrades the answer
+  rather than killing the turn.
+- `create_order`'s `conversation_id` is set by the agent, never by the model — a
+  prompt injection cannot attribute an order to someone else's thread.
+- The model never passes an amount. Totals are computed server-side from the
+  catalog price.
+
+### Model
+
+Claude `claude-opus-5` through the official `anthropic` SDK, with adaptive
+thinking. LangGraph owns the state machine; it does not own the model call.
+`langchain-anthropic` is deliberately not a dependency — one less wrapper
+between this code and the API.
+
+Thinking blocks are persisted verbatim with the transcript (signature included)
+because Claude requires them echoed back unchanged when a conversation continues
+on the same model, and the transcript round-trips through the database between
+HTTP requests.
+
+## Order lifecycle
+
+`pending_approval` (M4) -> `created` -> `awaiting_payment` -> `paid`
+                                    \-> `failed` / `cancelled` / `blocked` (M4)
+
+The local order row is written **before** the Razorpay call, so a provider
+failure still leaves a durable record that the agent intended to charge, with
+the failure recorded against it. An order that existed only inside a failed HTTP
+call would be invisible to an auditor.
+
+Stock is decremented only when payment verifies, so an abandoned checkout never
+silently consumes inventory. Re-verification is idempotent, because Razorpay can
+deliver both a checkout callback and a webhook for the same payment.

@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
 from app.api.catalog import router as catalog_router
+from app.api.chat import router as chat_router
 from app.api.health import router as health_router
 from app.config import settings
 from app.db.session import engine
@@ -67,6 +68,9 @@ def create_app() -> FastAPI:
     # so an external agent can discover it without version negotiation. The
     # document itself carries `schema_version`.
     app.include_router(catalog_router)
+
+    # Conversational checkout. Streams Server-Sent Events.
+    app.include_router(chat_router)
 
     return app
 

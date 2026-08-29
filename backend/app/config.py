@@ -51,6 +51,14 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-opus-5"
     anthropic_max_tokens: int = 4096
+    # Effort trades thinking depth against latency and cost. "medium" keeps a
+    # chat turn responsive; the spend caps are enforced server-side regardless,
+    # so model effort is never the thing keeping a purchase safe.
+    anthropic_effort: Literal["low", "medium", "high", "xhigh", "max"] = "medium"
+
+    # Upper bound on tool-calling rounds within a single chat turn. A model that
+    # keeps calling tools without concluding must terminate, not spin.
+    agent_max_iterations: int = 8
 
     # ---- Guardrails (wired up fully in Milestone 4) ----
     # Amounts are in the currency's minor unit (paise for INR).

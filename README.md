@@ -164,11 +164,54 @@ read and explain to the buyer — the substrate for Milestone 4's graceful failu
 
 ---
 
+## The purchasing agent
+
+```
+START -> parse_intent -> agent -> [dispatch] -> search_catalog
+                          ^                  -> create_order      (money)
+                          |                  -> verify_payment    (money)
+                          |                        |
+                          +---- collect_results <--+
+                          |
+                          +-> finish -> END
+```
+
+**Money-moving tools get their own graph nodes.** A generic "execute whatever the
+model asked for" node would make the spend gate a conditional buried inside an
+executor. Separate nodes make it *structural*: the Milestone 4 guardrail has
+exactly one place to live, and the graph refuses to build if a money tool is ever
+routed anywhere else.
+
+Four bounds hold no matter what the model does:
+
+| Bound | Enforced by |
+|---|---|
+| Tool rounds per turn are capped | `AGENT_MAX_ITERATIONS`, checked in the agent node |
+| A failing tool degrades the turn, never kills it | uniform `{ok, error}` envelope |
+| The model never chooses an amount | totals computed server-side from the catalog |
+| An order belongs to its own conversation | `conversation_id` set by the agent, not the model |
+
+That last one matters: if the model supplied `conversation_id`, a prompt
+injection could attribute a purchase to someone else's thread. There's a test for it.
+
+Talk to the agent over `POST /chat`, which streams Server-Sent Events —
+`conversation`, `intent`, `message`, `tool_call`, `tool_result`, `products`,
+`order`, `done`, `error`, `end`. Once the stream has opened, failures arrive as
+`error` events rather than status codes.
+
+### Model
+
+Claude `claude-opus-5` via the official `anthropic` SDK with adaptive thinking.
+LangGraph owns the state machine; it does not own the model call. `langchain-anthropic`
+is deliberately not a dependency — one less wrapper between this code and the API.
+
+---
+
 ## Milestone status
 
 - [x] **M0** — Scaffold, env config, health checks
 - [x] **M1** — Agent-readable catalog + search/get tools
-- [ ] **M2** — LangGraph purchasing agent
+- [x] **M2** — LangGraph purchasing agent + Razorpay order/verify tools
 - [ ] **M3** — Chat UI + merchant dashboard
 - [ ] **M4** — Guardrails, audit trail, graceful failure
 - [ ] **M5** — Deploy + demo assets

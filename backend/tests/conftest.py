@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING
 
 # Force a disposable in-memory DB and known-safe config BEFORE app import.
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
@@ -15,10 +16,14 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+if TYPE_CHECKING:
+    from tests.fakes import FakeRazorpay
+
 from app.db.base import Base
 from app.db.models import Product
 from app.db.session import SessionLocal, engine
 from app.main import create_app
+from app.services import orders as orders_service
 
 # A deliberately small catalog spanning the guardrail bands, so tests can assert
 # on price filtering and stock filtering without depending on the seed script.
@@ -101,6 +106,16 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
+
+
+@pytest.fixture
+def fake_razorpay(monkeypatch: pytest.MonkeyPatch) -> "FakeRazorpay":
+    """Substitute the Razorpay client everywhere the order service resolves it."""
+    from tests.fakes import FakeRazorpay
+
+    fake = FakeRazorpay()
+    monkeypatch.setattr(orders_service, "get_razorpay_client", lambda: fake)
+    return fake
 
 
 @pytest_asyncio.fixture
