@@ -7,6 +7,21 @@ from collections.abc import AsyncGenerator, Generator
 from typing import TYPE_CHECKING
 
 # Force a disposable in-memory DB and known-safe config BEFORE app import.
+# The suite creates and DROPS every table in teardown. Pointed at a real
+# database that wipes the schema while leaving alembic_version intact, so the
+# next `alembic upgrade head` reports "already at head" against an empty
+# database. Refuse rather than destroy: an exported DATABASE_URL from a previous
+# shell command is all it takes.
+_requested_db = os.environ.get("DATABASE_URL")
+if _requested_db and not _requested_db.startswith("sqlite"):
+    raise RuntimeError(
+        "Refusing to run the test suite against a non-SQLite database.\n"
+        f"  DATABASE_URL = {_requested_db.split('@')[-1]}\n"
+        "The suite drops every table in teardown, which would wipe that schema "
+        "while leaving alembic_version claiming it is migrated.\n"
+        "Unset DATABASE_URL, or set TEST_ALLOW_REAL_DB=1 if you truly mean it."
+    ) if os.environ.get("TEST_ALLOW_REAL_DB") != "1" else None
+
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 # Pinned, not defaulted: a developer running with AGENT_MODE=scripted in their
 # local .env must not silently change what the suite exercises.

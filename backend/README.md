@@ -259,3 +259,24 @@ charged and a genuine retry must be able to proceed.
 `services/idempotency.py` uses Redis (`SET NX`) when `REDIS_URL` is set and an
 in-process store otherwise. The unique index on `orders.idempotency_key` is the
 backstop that makes the multi-worker case safe regardless.
+
+
+## Verified against Postgres
+
+The suite runs on in-memory SQLite for speed, but the production path has been
+exercised directly: migrations apply and round-trip on real Postgres 16 (JSONB
+variant included), and the app has completed the full purchase flow against
+Postgres + Redis + the live Razorpay test API.
+
+```bash
+docker compose up -d postgres redis
+export DATABASE_URL=postgresql://autobuy:autobuy@localhost:5432/autobuy
+export REDIS_URL=redis://localhost:6379/0
+alembic upgrade head && python -m scripts.seed_catalog
+uvicorn app.main:app --port 8000
+```
+
+**Do not point the test suite at that database.** It drops every table in
+teardown, which would wipe the schema while leaving `alembic_version` claiming
+it is migrated. `conftest.py` refuses to run against a non-SQLite `DATABASE_URL`
+for exactly this reason.
