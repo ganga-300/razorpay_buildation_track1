@@ -15,13 +15,17 @@ export function Badge({
   tone = "neutral",
   children,
   className,
+  title,
 }: {
   tone?: BadgeTone;
   children: ReactNode;
   className?: string;
+  /** Native tooltip, for badges whose meaning is not obvious from the label. */
+  title?: string;
 }) {
   return (
     <span
+      title={title}
       className={cn(
         "inline-flex items-center whitespace-nowrap rounded-full border",
         "px-2 py-0.5 text-xs font-medium",

@@ -8,6 +8,9 @@ from typing import TYPE_CHECKING
 
 # Force a disposable in-memory DB and known-safe config BEFORE app import.
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+# Pinned, not defaulted: a developer running with AGENT_MODE=scripted in their
+# local .env must not silently change what the suite exercises.
+os.environ["AGENT_MODE"] = "model"
 os.environ.setdefault("ENVIRONMENT", "local")
 os.environ.setdefault("DEBUG", "false")
 

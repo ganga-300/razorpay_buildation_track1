@@ -357,6 +357,32 @@ Payment verification posts to `/payments/verify` rather than routing back throug
 the agent — a signature check is a security control, and a control that only runs
 if a language model decides to call a tool is not a control.
 
+### Running without Anthropic credit
+
+`AGENT_MODE` selects what drives the conversation:
+
+| Mode | Brain | Needs |
+|---|---|---|
+| `model` (default) | Claude `claude-opus-5` | a funded `ANTHROPIC_API_KEY` |
+| `scripted` | a deterministic keyword planner | nothing |
+
+```bash
+AGENT_MODE=scripted uvicorn app.main:app --port 8000
+```
+
+Scripted mode changes **only the conversational surface**. The guardrails, the
+approval gate, the audit trail, retry, idempotency, and the live Razorpay
+test-mode calls are byte-for-byte identical — which is precisely the point:
+
+> **The safety properties do not depend on the language model behaving.**
+
+The planner is deliberately dumb — keyword rules over whatever the catalog tools
+return — and every cap, gate, and audit row still holds. It is never a silent
+fallback: an unset key in `model` mode produces a clear error rather than
+quietly degrading, and the chat header badges every scripted turn, because a
+buyer has a right to know whether a model or a rule table is spending their
+money.
+
 ### Model
 
 Claude `claude-opus-5` via the official `anthropic` SDK with adaptive thinking.

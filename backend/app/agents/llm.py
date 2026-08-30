@@ -255,3 +255,22 @@ def get_llm_client() -> AnthropicLLMClient:
     if _client is None:
         _client = AnthropicLLMClient()
     return _client
+
+
+def get_agent_client() -> LLMClient:
+    """The brain for a chat turn: Claude, or the deterministic planner.
+
+    Scripted mode is selected explicitly by `AGENT_MODE=scripted`. It is never a
+    silent fallback — an unset or unfunded key in `model` mode produces a clear
+    error rather than quietly degrading to keyword matching, because a buyer has
+    a right to know whether a model or a rule table is spending their money.
+    """
+    if settings.agent_mode == "scripted":
+        from app.agents.scripted_planner import ScriptedPlanner
+
+        return ScriptedPlanner()
+    return get_llm_client()
+
+
+def agent_mode_label() -> str:
+    return "scripted" if settings.agent_mode == "scripted" else settings.anthropic_model

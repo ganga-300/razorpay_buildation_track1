@@ -21,6 +21,8 @@ export function useChat() {
   const [items, setItems] = useState<ChatItem[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [intent, setIntent] = useState<AgentIntent | null>(null);
+  const [agentMode, setAgentMode] = useState<"model" | "scripted" | null>(null);
+  const [model, setModel] = useState<string | null>(null);
 
   const conversationId = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -62,6 +64,8 @@ export function useChat() {
         switch (event.event) {
           case "conversation":
             conversationId.current = event.data.conversation_id;
+            setAgentMode(event.data.agent_mode);
+            setModel(event.data.model);
             break;
 
           case "intent":
@@ -219,5 +223,5 @@ export function useChat() {
     setIsStreaming(false);
   }, []);
 
-  return { items, isStreaming, intent, send, reset, replaceOrder };
+  return { items, isStreaming, intent, agentMode, model, send, reset, replaceOrder };
 }

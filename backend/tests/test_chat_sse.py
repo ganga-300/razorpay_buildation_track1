@@ -43,7 +43,7 @@ def agent(monkeypatch: pytest.MonkeyPatch) -> ScriptedLLM:
 
     llm = ScriptedLLM()
     monkeypatch.setattr(settings, "anthropic_api_key", "sk-ant-test")
-    monkeypatch.setattr(chat_module, "get_llm_client", lambda: llm)
+    monkeypatch.setattr(chat_module, "get_agent_client", lambda: llm)
     return llm
 
 

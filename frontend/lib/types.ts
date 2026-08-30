@@ -204,7 +204,14 @@ export interface ErrorPayload {
 
 /** Discriminated union of every event `POST /chat` can emit. */
 export type ChatEvent =
-  | { event: "conversation"; data: { conversation_id: string } }
+  | {
+      event: "conversation";
+      data: {
+        conversation_id: string;
+        agent_mode: "model" | "scripted";
+        model: string;
+      };
+    }
   | { event: "intent"; data: { intent: AgentIntent } }
   | { event: "message"; data: { text: string } }
   | {

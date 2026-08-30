@@ -23,7 +23,8 @@ const SUGGESTIONS = [
 ] as const;
 
 export function ChatWindow() {
-  const { items, isStreaming, intent, send, reset, replaceOrder } = useChat();
+  const { items, isStreaming, intent, agentMode, model, send, reset, replaceOrder } =
+    useChat();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Scroll the transcript container directly rather than calling
@@ -43,6 +44,14 @@ export function ChatWindow() {
         subtitle="Razorpay test mode · every money action is bounded and audited"
         action={
           <div className="flex items-center gap-2">
+            {/* A scripted turn must never be mistaken for the model. */}
+            {agentMode === "scripted" ? (
+              <Badge tone="warn" title="Deterministic keyword planner — no model call">
+                scripted planner
+              </Badge>
+            ) : model ? (
+              <Badge tone="neutral">{model}</Badge>
+            ) : null}
             {intent ? <Badge tone="brand">{intent}</Badge> : null}
             {items.length > 0 ? (
               <Button variant="ghost" size="sm" onClick={reset}>

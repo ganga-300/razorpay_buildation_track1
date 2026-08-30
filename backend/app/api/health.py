@@ -44,9 +44,18 @@ async def health() -> HealthResponse:
         ),
         DependencyStatus(
             name="anthropic",
-            configured=settings.anthropic_configured,
+            # In scripted mode the agent needs no model, so a missing key is not
+            # a gap — reporting it as one would send an operator hunting a
+            # problem that does not exist.
+            configured=(
+                True if settings.agent_mode == "scripted" else settings.anthropic_configured
+            ),
             reachable=None,
-            detail=settings.anthropic_model if settings.anthropic_configured else "key not set",
+            detail=(
+                "not required — AGENT_MODE=scripted"
+                if settings.agent_mode == "scripted"
+                else (settings.anthropic_model if settings.anthropic_configured else "key not set")
+            ),
         ),
     ]
 

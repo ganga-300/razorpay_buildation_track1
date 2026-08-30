@@ -56,6 +56,15 @@ class Settings(BaseSettings):
     # so model effort is never the thing keeping a purchase safe.
     anthropic_effort: Literal["low", "medium", "high", "xhigh", "max"] = "medium"
 
+    # "model"    — Claude drives the conversation (needs a funded ANTHROPIC_API_KEY)
+    # "scripted"  — a deterministic keyword planner drives it, with no model call.
+    #
+    # Scripted mode exists so the project is demonstrable without API credit. It
+    # changes ONLY the conversational surface: guardrails, the approval gate, the
+    # audit trail, retry, idempotency, and the live Razorpay calls are untouched.
+    # The UI badges every scripted turn — it must never be mistaken for the model.
+    agent_mode: Literal["model", "scripted"] = "model"
+
     # Upper bound on tool-calling rounds within a single chat turn. A model that
     # keeps calling tools without concluding must terminate, not spin.
     agent_max_iterations: int = 8

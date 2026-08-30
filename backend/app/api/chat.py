@@ -25,7 +25,7 @@ from typing import Any
 from fastapi import APIRouter
 from sse_starlette.sse import EventSourceResponse
 
-from app.agents.llm import get_llm_client
+from app.agents.llm import agent_mode_label, get_agent_client
 from app.agents.purchasing_agent import (
     AGENT_EVENT_TYPES,
     INTERNAL_EVENT_TYPES,
@@ -59,9 +59,16 @@ async def _turn_stream(request: ChatRequest) -> AsyncIterator[dict[str, str]]:
                 session, request.conversation_id
             )
             conversation_id = conversation.id
-            yield _sse("conversation", {"conversation_id": conversation_id})
+            yield _sse(
+                "conversation",
+                {
+                    "conversation_id": conversation_id,
+                    "agent_mode": settings.agent_mode,
+                    "model": agent_mode_label(),
+                },
+            )
 
-            if not settings.anthropic_configured:
+            if settings.agent_mode == "model" and not settings.anthropic_configured:
                 yield _sse(
                     "error",
                     {
@@ -82,7 +89,7 @@ async def _turn_stream(request: ChatRequest) -> AsyncIterator[dict[str, str]]:
 
             deps = AgentDeps(
                 session=session,
-                llm=get_llm_client(),
+                llm=get_agent_client(),
                 conversation_id=conversation_id,
             )
 

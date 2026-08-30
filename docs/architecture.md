@@ -303,6 +303,7 @@ changes later.
 | The model never passes an **amount** | Totals are computed server-side from the catalog price. |
 | Payment verification is **not** an agent tool | A signature check is a security control; a control that only runs if a language model chooses to call a tool is not a control. |
 | Amounts in **minor units** everywhere | Floating-point rupees are how you charge someone ₹0.01 or ₹100. `display` strings are for humans only. |
+| A **swappable brain** (`AGENT_MODE`) | The planner and Claude satisfy the same `LLMClient` protocol. Swapping in a keyword table leaves every cap, gate and audit row identical — which demonstrates that the safety properties are not enforced by the model. |
 | Test mode enforced at **startup** | `config.py` refuses to boot on a key without the `rzp_test_` prefix. |
 | Hand-written **SSE client** | `EventSource` cannot issue POST. Frame boundaries match `\r?\n\r?\n` — `sse-starlette` emits CRLF, and splitting on `\n\n` silently buffers the whole stream. |
 
