@@ -153,14 +153,19 @@ A [`Dockerfile`](backend/Dockerfile) is included for Fly, Railway, or Cloud Run.
 
 ### Live URLs
 
-> Fill these in after deploying.
-
 | Surface | URL |
 |---|---|
-| Frontend | `https://<your-app>.vercel.app` |
-| API | `https://<your-api>.onrender.com` |
-| API docs | `https://<your-api>.onrender.com/docs` |
-| Health | `https://<your-api>.onrender.com/health` |
+| **Frontend** | <https://razorpay-buildation-track1.vercel.app> |
+| **API** | <https://razorpay-buildation-track1.onrender.com> |
+| API docs | <https://razorpay-buildation-track1.onrender.com/docs> |
+| Health | <https://razorpay-buildation-track1.onrender.com/health> |
+| Audit trail | <https://razorpay-buildation-track1.onrender.com/audit> |
+
+Deployed with `AGENT_MODE=scripted` (see *Running without Anthropic credit*
+above) against the live Razorpay **test-mode** API. Verified end to end on the
+deployment: an auto-approved ₹349 order, a ₹1,299 order held and then approved
+by hand, and a ₹2,499 order blocked by the per-transaction cap without ever
+reaching Razorpay.
 
 **Free-tier note:** Render free web services sleep when idle and take ~50s to
 wake. Hit `/health` a minute before demoing.
