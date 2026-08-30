@@ -73,6 +73,22 @@ class Settings(BaseSettings):
     per_transaction_cap_minor: int = Field(default=2_000_00)   # ₹2,000.00
     daily_cap_minor: int = Field(default=10_000_00)            # ₹10,000.00
 
+    @field_validator("database_url")
+    @classmethod
+    def _normalise_async_driver(cls, v: str) -> str:
+        """Rewrite a sync Postgres URL to the asyncpg driver.
+
+        Managed platforms hand out `postgres://` or `postgresql://` URLs, but the
+        async engine needs `postgresql+asyncpg://`. Without this the app boots
+        locally on SQLite and dies on first deploy with an opaque
+        `InvalidRequestError: The asyncio extension requires an async driver`.
+        """
+        if v.startswith("postgres://"):
+            return v.replace("postgres://", "postgresql+asyncpg://", 1)
+        if v.startswith("postgresql://"):
+            return v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return v
+
     @field_validator("razorpay_key_id")
     @classmethod
     def _must_be_test_key(cls, v: str) -> str:

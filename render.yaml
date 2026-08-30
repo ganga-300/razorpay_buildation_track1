@@ -1,0 +1,83 @@
+# Render Blueprint for the AutoBuy backend.
+#
+# Deploy:  Render Dashboard -> New -> Blueprint -> point at this repo.
+#
+# Everything except the four secrets below is wired automatically. The secrets
+# are marked `sync: false`, so Render prompts for them at deploy time and never
+# stores them in this file — which is why this is safe to commit.
+
+databases:
+  - name: autobuy-postgres
+    databaseName: autobuy
+    user: autobuy
+    plan: free
+
+services:
+  # ---- Redis (idempotency keys) ----
+  # Optional. Without it the app falls back to an in-process store, which is
+  # correct for a single worker; the unique index on orders.idempotency_key is
+  # what makes the multi-worker case safe either way.
+  - type: keyvalue
+    name: autobuy-redis
+    plan: free
+    ipAllowList: []          # reachable only from inside the Render network
+    maxmemoryPolicy: noeviction
+
+  # ---- FastAPI backend ----
+  - type: web
+    name: autobuy-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    # Migrations run before the server binds. Seeding is idempotent, so a redeploy
+    # updates the catalog in place rather than duplicating it.
+    startCommand: >-
+      alembic upgrade head &&
+      python -m scripts.seed_catalog &&
+      uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health/live
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.13.1"
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "false"
+
+      # Managed URLs, injected by Render. The Postgres URL arrives as
+      # postgresql://... and app/config.py rewrites it to the asyncpg driver.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: autobuy-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: autobuy-redis
+          property: connectionString
+
+      # Set this to the deployed Vercel origin, e.g.
+      #   https://autobuy.vercel.app
+      # A trailing slash will not match — omit it.
+      - key: CORS_ORIGINS
+        sync: false
+
+      # ---- Secrets: entered in the Render dashboard, never committed ----
+      # RAZORPAY_KEY_ID must start with rzp_test_ or the app refuses to boot.
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+
+      # ---- Guardrails (minor units — paise) ----
+      - key: AUTO_APPROVE_LIMIT_MINOR
+        value: "50000"        # ₹500.00
+      - key: PER_TRANSACTION_CAP_MINOR
+        value: "200000"       # ₹2,000.00
+      - key: DAILY_CAP_MINOR
+        value: "1000000"      # ₹10,000.00

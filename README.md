@@ -102,8 +102,75 @@ Get test keys from the [Razorpay Dashboard](https://dashboard.razorpay.com) → 
 ## Tests
 
 ```bash
-cd backend && .venv/bin/python -m pytest
+cd backend && .venv/bin/python -m pytest    # 158 tests
 ```
+
+```bash
+cd frontend && npm run test                 # 7 tests
+```
+
+---
+
+## Deploy
+
+### Backend → Render
+
+The repo ships a [`render.yaml`](render.yaml) blueprint that provisions the web
+service, Postgres, and Redis together.
+
+1. Render Dashboard → **New → Blueprint** → point at this repo.
+2. Render prompts for the values marked `sync: false` — they are never committed:
+
+   | Variable | Value |
+   |---|---|
+   | `RAZORPAY_KEY_ID` | your `rzp_test_...` key |
+   | `RAZORPAY_KEY_SECRET` | its secret |
+   | `RAZORPAY_WEBHOOK_SECRET` | webhook secret |
+   | `ANTHROPIC_API_KEY` | `sk-ant-...` |
+   | `CORS_ORIGINS` | the Vercel origin, e.g. `https://autobuy.vercel.app` (no trailing slash) |
+
+3. `DATABASE_URL` and `REDIS_URL` are wired automatically. The Postgres URL
+   arrives as `postgresql://...`; `app/config.py` rewrites it to the `asyncpg`
+   driver, which is what the async engine needs.
+
+Migrations and the idempotent catalog seed run in the start command, so a
+redeploy updates the catalog in place rather than duplicating it.
+
+A [`Dockerfile`](backend/Dockerfile) is included for Fly, Railway, or Cloud Run.
+
+### Frontend → Vercel
+
+1. Import the repo, set **Root Directory** to `frontend`.
+2. Set environment variables:
+
+   | Variable | Value |
+   |---|---|
+   | `NEXT_PUBLIC_API_BASE_URL` | the Render URL, e.g. `https://autobuy-api.onrender.com` |
+   | `NEXT_PUBLIC_RAZORPAY_KEY_ID` | the same `rzp_test_...` key id |
+
+3. Deploy, then set `CORS_ORIGINS` on Render to the Vercel origin and redeploy
+   the backend. **The two must agree or every request is blocked by CORS.**
+
+### Live URLs
+
+> Fill these in after deploying.
+
+| Surface | URL |
+|---|---|
+| Frontend | `https://<your-app>.vercel.app` |
+| API | `https://<your-api>.onrender.com` |
+| API docs | `https://<your-api>.onrender.com/docs` |
+| Health | `https://<your-api>.onrender.com/health` |
+
+**Free-tier note:** Render free web services sleep when idle and take ~50s to
+wake. Hit `/health` a minute before demoing.
+
+---
+
+## Docs
+
+- [docs/architecture.md](docs/architecture.md) — diagrams, the money path, and why each decision was made
+- [docs/demo-script.md](docs/demo-script.md) — the 5-minute walkthrough
 
 ---
 

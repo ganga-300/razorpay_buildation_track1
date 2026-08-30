@@ -142,7 +142,13 @@ export default function DashboardPage() {
                     : undefined
                 }
               />
-              {orders ? <OrdersTable orders={orders.orders} /> : <Loading />}
+              {orders ? (
+                <OrdersTable orders={orders.orders} />
+              ) : loading ? (
+                <Loading />
+              ) : (
+                <Unavailable />
+              )}
             </>
           ) : (
             <>
@@ -150,7 +156,13 @@ export default function DashboardPage() {
                 title="Audit trail"
                 subtitle="Every gated decision, written before the action ran. Click a reason to see the bounds checked."
               />
-              {audit ? <AuditTable entries={audit.entries} /> : <Loading />}
+              {audit ? (
+                <AuditTable entries={audit.entries} />
+              ) : loading ? (
+                <Loading />
+              ) : (
+                <Unavailable />
+              )}
             </>
           )}
         </Card>
@@ -163,6 +175,19 @@ function Loading() {
   return (
     <div className="px-4 py-10 text-center text-sm text-muted">
       <Spinner /> Loading…
+    </div>
+  );
+}
+
+/**
+ * Shown when a load failed. A panel that keeps saying "Loading…" after the
+ * request already failed is worse than an error — on a page about money, it
+ * implies data is on its way when none is coming.
+ */
+function Unavailable() {
+  return (
+    <div className="px-4 py-10 text-center text-sm text-muted">
+      Could not load this data. Check the backend, then hit Refresh.
     </div>
   );
 }

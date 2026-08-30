@@ -1,0 +1,266 @@
+# AutoBuy — 5-minute demo script
+
+Razorpay AI Buildathon, Track 01. Everything runs in **Razorpay test mode**.
+
+The narrative arc, in one line:
+**an AI agent buys something → is stopped and asks permission → is refused outright → hits a payment failure and recovers → and every one of those decisions is on the record.**
+
+---
+
+## Before you start (5 minutes, do this beforehand)
+
+```bash
+# 1. Backend
+cd backend
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env          # fill in the keys below
+alembic upgrade head
+python -m scripts.seed_catalog
+uvicorn app.main:app --reload --port 8000
+```
+
+```bash
+# 2. Frontend (second terminal)
+cd frontend
+npm install
+cp .env.example .env.local    # NEXT_PUBLIC_RAZORPAY_KEY_ID must match the backend
+npm run dev
+```
+
+Two keys are required in `backend/.env`:
+
+| Variable | Where from |
+|---|---|
+| `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | Razorpay Dashboard → Settings → API Keys, **toggle set to Test Mode**. The app refuses to boot on a key that is not `rzp_test_...` |
+| `ANTHROPIC_API_KEY` | console.anthropic.com |
+
+**Check before presenting:** <http://localhost:8000/health> should report every
+dependency `configured: true`. If `razorpay` or `anthropic` is false, the demo
+will not run.
+
+Reset to a clean slate so the audit trail tells one story:
+
+```bash
+cd backend && rm -f autobuy.db && alembic upgrade head && python -m scripts.seed_catalog
+```
+
+Open two browser tabs: **`/chat`** and **`/dashboard`**.
+
+---
+
+## Beat 1 — The catalog is machine-readable (30s)
+
+> "Before an agent can buy from a merchant, it has to be able to *read* the
+> merchant. This is the catalog as an agent sees it."
+
+```bash
+curl -s localhost:8000/catalog \
+  | jq '{schema_version, spec, merchant, policy: .capabilities.purchase_policy}'
+```
+
+```json
+{
+  "schema_version": "1.0",
+  "spec": "autobuy.catalog/v1",
+  "merchant": { "name": "AutoBuy", "currency": "INR",
+                "payment_provider": "razorpay", "payment_mode": "test" },
+  "policy": {
+    "auto_approve_limit":  { "amount_minor":   50000, "display": "₹500.00" },
+    "per_transaction_cap": { "amount_minor":  200000, "display": "₹2,000.00" },
+    "daily_cap":           { "amount_minor": 1000000, "display": "₹10,000.00" },
+    "enforcement": "server-side"
+  }
+}
+```
+
+**Point at `purchase_policy`.** The merchant publishes its own spend limits *in
+the catalog*, so an agent knows the rules before it tries anything — and
+`enforcement: server-side` says plainly that reading them is a courtesy, not the
+control.
+
+Every price is an integer in **paise**. `display` is for humans only.
+
+---
+
+## Beat 2 — A normal purchase (60s)
+
+In `/chat`:
+
+```
+I need a USB-C cable for my laptop, under ₹500
+```
+
+The agent searches and shows product cards.
+
+```
+buy the 2-metre one
+```
+
+**What to point at, in order:**
+
+1. The **`search_catalog`** trace — arguments and result, inline.
+2. The **`create_order`** trace, badged **`moves money`** in amber.
+3. The **Spend guardrail** panel: *within limits*, with all three bounds and the
+   observed value against each.
+4. The order card, and the **Pay ₹349.00** button.
+
+> "₹349 is under the ₹500 auto-approve limit, so the agent just did it. But it
+> still had to ask, and you can see it asking."
+
+Click **Pay**, complete Razorpay's test checkout. The card settles to **Paid**.
+
+---
+
+## Beat 3 — The approval gate (75s) — *the important one*
+
+```
+now buy the silent wireless mouse
+```
+
+**Nothing is charged.** Point at:
+
+1. **Spend guardrail** — `auto_approve_limit` in red: `₹1,299.00 / ₹500.00`.
+   The two hard caps are green.
+2. The order card: **Awaiting approval**.
+3. The **Your approval is needed** panel with **Approve ₹1,299.00** / **Decline**.
+
+> "The agent stopped itself. It didn't ask me in words and then take my 'yes' as
+> permission — approval is a POST to `/orders/{id}/approve` tied to this specific
+> order. If it trusted the word 'yes' in the chat, a prompt injection in a product
+> description could forge it."
+
+Click **Approve**. The order executes and moves to *Awaiting payment*.
+
+> "And the caps are re-checked at approval time. If other spend had landed while
+> I was deciding, this would still be refused — approval is permission for an
+> amount, not a bypass of the daily cap."
+
+---
+
+## Beat 4 — A refusal that cannot be approved (45s)
+
+```
+buy the noise cancelling headphones
+```
+
+> "₹2,499 is over the merchant's ₹2,000 per-transaction cap. Notice there is no
+> Approve button — this isn't a confirmation step. I *can't* authorise past it,
+> and neither can the agent."
+
+Point at `attempts: 0` later in the audit trail: **Razorpay was never contacted.**
+The order is still recorded, as `blocked`, so the refusal is on the record too.
+
+---
+
+## Beat 5 — One failure, handled gracefully (60s)
+
+Two ways to show this. **Pick one and rehearse it.**
+
+### Option A — signature verification fails (deterministic, recommended)
+
+Take the `razorpay_order_id` from any order awaiting payment, then:
+
+```bash
+curl -s -X POST localhost:8000/payments/verify \
+  -H 'Content-Type: application/json' \
+  -d '{"razorpay_order_id":"order_XXXX","razorpay_payment_id":"pay_FORGED","razorpay_signature":"tampered"}' | jq
+```
+
+Returns **400** with `{"code": "signature_mismatch"}`, the order flips to
+**failed**, and an audit entry records it.
+
+> "A tampered callback is not the same as a declined card, and it must never be
+> indistinguishable from one. It is rejected, and it is recorded."
+
+### Option B — the payment provider goes down (live, more dramatic)
+
+Start the order, and **turn off your network** for a few seconds while
+`create_order` is in flight.
+
+> "It timed out. The agent retried once with a backoff, failed again, and
+> stopped — deliberately once, because a gateway that is failing rarely recovers
+> in milliseconds and every extra attempt widens the window for a double charge.
+> Nothing was charged, and it says so instead of crashing."
+
+The agent's reply names what happened and what to do next. The audit entry shows
+**`attempts: 2`** — the retry is visible, not hidden inside one apparently clean
+call.
+
+---
+
+## Beat 6 — The record (60s) — *end here*
+
+Switch to **`/dashboard`**.
+
+**Spend meter first:**
+
+> "Rolling 24-hour spend against the ₹10,000 cap, with all three limits. This is
+> what 'bounded' looks like."
+
+**Then the Orders tab** — including the blocked order, marked *never reached
+Razorpay*.
+
+**Then Audit trail** — the payoff:
+
+| Amount | Decision → Outcome | Note |
+|---|---|---|
+| ₹349 | Allowed → Succeeded | under the auto-approve limit |
+| ₹1,299 | Approval required → Succeeded | `by buyer` |
+| ₹2,499 | Blocked → Blocked | `0 tries` — never reached Razorpay |
+| ₹1,799 | Approval required → Failed | `2 tries` — the retry |
+
+Click any **reason** to expand the bounds that were checked **at decision time**.
+
+> "Every money action the agent took, and every one it was stopped from taking.
+> The bounds are snapshotted, not recomputed — so if the merchant raises the cap
+> tomorrow, this record still says what the limit was when the decision was made.
+>
+> And these rows were written *before* each action ran, not after. If the process
+> died mid-charge, an audit trail written afterwards would have no record of the
+> one case you'd most want to investigate."
+
+---
+
+## Closing line
+
+> "Every money action here is explainable, bounded, and gated. The agent can
+> spend small amounts on its own, has to ask above a threshold, and cannot go
+> past a hard cap at all — and none of that depends on the language model
+> behaving. The caps are server-side; the model is never asked to be the safety
+> mechanism."
+
+---
+
+## Timing
+
+| Beat | Time |
+|---|---|
+| 1 · Agent-readable catalog | 0:30 |
+| 2 · Normal purchase | 1:00 |
+| 3 · Approval gate | 1:15 |
+| 4 · Hard-capped refusal | 0:45 |
+| 5 · Failure handled | 1:00 |
+| 6 · The audit trail | 1:00 |
+| | **5:30** |
+
+Cut Beat 1 if you need to be strictly under five minutes.
+
+---
+
+## If something breaks mid-demo
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Chat streams nothing | `ANTHROPIC_API_KEY` unset | An `error` event says so; check `/health` |
+| "Razorpay test credentials are not set" | keys missing | check `/health` |
+| App won't boot | a `rzp_live_` key | test mode only, by design |
+| Every order needs approval | caps too low for your catalog | raise `AUTO_APPROVE_LIMIT_MINOR` |
+| Dashboard empty | backend not running | check `NEXT_PUBLIC_API_BASE_URL` |
+
+**Fallback:** the whole flow is covered by the test suite, and it needs no keys
+and no network:
+
+```bash
+cd backend && pytest tests/test_audit_and_approval.py -v
+```
