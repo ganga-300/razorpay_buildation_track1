@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     # Render (and any Postgres deployment) overrides this with a postgres URL.
     database_url: str = "sqlite+aiosqlite:///./autobuy.db"
 
+    # Force the PgBouncer-safe connection settings even when the host does not
+    # advertise itself with "-pooler". Supabase's pooler, for instance, does not.
+    pgbouncer_mode: bool = False
+
     # ---- Redis (idempotency + rate limiting) ----
     # Optional locally: when unset the app falls back to an in-process store.
     redis_url: str | None = None
@@ -85,18 +89,42 @@ class Settings(BaseSettings):
     @field_validator("database_url")
     @classmethod
     def _normalise_async_driver(cls, v: str) -> str:
-        """Rewrite a sync Postgres URL to the asyncpg driver.
+        """Make any managed Postgres URL usable by asyncpg.
 
-        Managed platforms hand out `postgres://` or `postgresql://` URLs, but the
-        async engine needs `postgresql+asyncpg://`. Without this the app boots
-        locally on SQLite and dies on first deploy with an opaque
-        `InvalidRequestError: The asyncio extension requires an async driver`.
+        Two independent problems, both of which only surface on deploy:
+
+        1. **Driver.** Platforms hand out `postgres://` or `postgresql://`, but
+           the async engine needs `postgresql+asyncpg://`. Otherwise the app
+           boots locally on SQLite and dies in production with
+           `InvalidRequestError: The asyncio extension requires an async driver`.
+
+        2. **libpq-only query parameters.** Neon, Supabase and friends append
+           `?sslmode=require&channel_binding=require`. Those are libpq options;
+           asyncpg has never accepted them and fails with
+           `TypeError: connect() got an unexpected keyword argument 'sslmode'`.
+           asyncpg spells it `ssl`, taking the same values, so `sslmode` is
+           translated and `channel_binding` dropped.
         """
-        if v.startswith("postgres://"):
-            return v.replace("postgres://", "postgresql+asyncpg://", 1)
-        if v.startswith("postgresql://"):
-            return v.replace("postgresql://", "postgresql+asyncpg://", 1)
-        return v
+        if not v.startswith(("postgres://", "postgresql://", "postgresql+asyncpg://")):
+            return v
+
+        from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+        parts = urlsplit(v)
+        scheme = "postgresql+asyncpg"
+
+        params = dict(parse_qsl(parts.query, keep_blank_values=True))
+        # asyncpg's equivalent of libpq's sslmode, same accepted values.
+        if "sslmode" in params:
+            params.setdefault("ssl", params.pop("sslmode"))
+        else:
+            params.pop("sslmode", None)
+        # Negotiated by asyncpg itself; passing it through is a TypeError.
+        params.pop("channel_binding", None)
+
+        return urlunsplit(
+            (scheme, parts.netloc, parts.path, urlencode(params), parts.fragment)
+        )
 
     @field_validator("razorpay_key_id")
     @classmethod

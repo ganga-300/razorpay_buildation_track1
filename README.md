@@ -170,6 +170,36 @@ reaching Razorpay.
 **Free-tier note:** Render free web services sleep when idle and take ~50s to
 wake. Hit `/health` a minute before demoing.
 
+### Database: Neon (recommended over Render's free Postgres)
+
+Render's free Postgres **expires after 30 days**. [Neon](https://neon.tech)'s
+free tier does not, and it is a drop-in replacement.
+
+1. Create a Neon project, copy the connection string
+2. Set it as `DATABASE_URL` on the Render service — **paste it exactly as Neon
+   gives it to you**
+
+Neon's URL looks like:
+
+```
+postgresql://user:pass@ep-xxx.region.aws.neon.tech/dbname?sslmode=require&channel_binding=require
+```
+
+`app/config.py` normalises that on startup, which matters because **asyncpg
+rejects it verbatim**:
+
+| Neon gives you | Why asyncpg fails | What the app does |
+|---|---|---|
+| `postgresql://` | needs an async driver | rewrites to `postgresql+asyncpg://` |
+| `?sslmode=require` | `TypeError: connect() got an unexpected keyword argument 'sslmode'` | translates to `?ssl=require` |
+| `&channel_binding=require` | same — libpq-only | drops it (asyncpg negotiates it itself) |
+
+If you use Neon's **pooled** endpoint (`-pooler` in the host), the app also
+disables asyncpg's prepared-statement cache. PgBouncer in transaction mode
+multiplexes sessions across backends, so a cached statement goes missing and you
+get an intermittent `InvalidSQLStatementNameError` under load. Supabase's pooler
+does not put `-pooler` in the host — set `PGBOUNCER_MODE=true` there.
+
 ---
 
 ## Docs

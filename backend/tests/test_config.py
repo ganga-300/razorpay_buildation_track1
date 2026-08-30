@@ -71,5 +71,93 @@ def test_sqlite_is_left_alone() -> None:
 def test_credentials_survive_the_rewrite() -> None:
     """A botched rewrite that drops the password fails only at deploy time."""
     s = Settings(database_url="postgres://user:p%40ss@host:5432/db?sslmode=require")
-    assert s.database_url == "postgresql+asyncpg://user:p%40ss@host:5432/db?sslmode=require"
+    # sslmode is translated to asyncpg's spelling; the credentials are untouched.
+    assert s.database_url == "postgresql+asyncpg://user:p%40ss@host:5432/db?ssl=require"
     assert s.is_sqlite is False
+
+
+# --------------------------------------------------------------------------
+# Serverless Postgres (Neon, Supabase): libpq-only query parameters
+# --------------------------------------------------------------------------
+
+
+def test_sslmode_is_translated_for_asyncpg() -> None:
+    """asyncpg has never accepted libpq's `sslmode`.
+
+    Neon appends it to every connection string, and leaving it in place fails
+    at connect time with `TypeError: connect() got an unexpected keyword
+    argument 'sslmode'` — only on deploy, never locally.
+    """
+    s = Settings(
+        database_url=(
+            "postgresql://u:p@ep-x.ap-southeast-1.aws.neon.tech/autobuy"
+            "?sslmode=require"
+        )
+    )
+    assert "sslmode=" not in s.database_url
+    assert "ssl=require" in s.database_url
+
+
+def test_channel_binding_is_dropped() -> None:
+    """Another libpq-only parameter Neon adds; asyncpg negotiates it itself."""
+    s = Settings(
+        database_url=(
+            "postgresql://u:p@ep-x.aws.neon.tech/autobuy"
+            "?sslmode=require&channel_binding=require"
+        )
+    )
+    assert "channel_binding" not in s.database_url
+    assert "ssl=require" in s.database_url
+
+
+def test_a_url_with_no_query_string_is_left_clean() -> None:
+    """Render's internal URL has no parameters; none should be invented."""
+    s = Settings(database_url="postgresql://u:p@dpg-abc-a/autobuy")
+    assert s.database_url == "postgresql+asyncpg://u:p@dpg-abc-a/autobuy"
+    assert "?" not in s.database_url
+
+
+def test_an_explicit_ssl_param_is_preserved() -> None:
+    s = Settings(database_url="postgresql://u:p@host/db?ssl=verify-full")
+    assert "ssl=verify-full" in s.database_url
+
+
+# --------------------------------------------------------------------------
+# Engine tuning for pooled endpoints
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("url", "expect_cache_disabled"),
+    [
+        ("postgresql://u:p@ep-x-pooler.aws.neon.tech/db?sslmode=require", True),
+        ("postgresql://u:p@ep-x.aws.neon.tech/db?sslmode=require", False),
+        ("postgresql://autobuy:autobuy@localhost:5432/autobuy", False),
+    ],
+)
+def test_pooled_endpoints_disable_the_prepared_statement_cache(
+    url: str, expect_cache_disabled: bool
+) -> None:
+    """PgBouncer in transaction mode breaks asyncpg's prepared statements.
+
+    Sessions are multiplexed across backends, so a statement prepared on one
+    connection is missing on the next — surfacing as an intermittent
+    InvalidSQLStatementNameError under load rather than a clean startup failure.
+
+    Asserted on the same predicate `db/session.py` uses, so the two cannot drift
+    without this failing.
+    """
+    from app.config import Settings
+
+    settings = Settings(database_url=url)
+    is_pooled = "-pooler." in settings.database_url or settings.pgbouncer_mode
+    assert is_pooled is expect_cache_disabled
+
+
+def test_pgbouncer_mode_forces_the_pooled_settings() -> None:
+    """Supabase's pooler does not advertise itself with '-pooler'."""
+    s = Settings(
+        database_url="postgresql://u:p@aws-0-region.pooler.supabase.com/postgres",
+        pgbouncer_mode=True,
+    )
+    assert s.pgbouncer_mode is True
