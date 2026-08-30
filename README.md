@@ -161,11 +161,14 @@ A [`Dockerfile`](backend/Dockerfile) is included for Fly, Railway, or Cloud Run.
 | Health | <https://razorpay-buildation-track1.onrender.com/health> |
 | Audit trail | <https://razorpay-buildation-track1.onrender.com/audit> |
 
-Deployed with `AGENT_MODE=scripted` (see *Running without Anthropic credit*
-above) against the live Razorpay **test-mode** API. Verified end to end on the
-deployment: an auto-approved ₹349 order, a ₹1,299 order held and then approved
-by hand, and a ₹2,499 order blocked by the per-transaction cap without ever
-reaching Razorpay.
+Backend on Render, database on **Neon Postgres**, frontend on Vercel, running
+`AGENT_MODE=scripted` (see *Running without Anthropic credit* above) against the
+live Razorpay **test-mode** API.
+
+Verified end to end on the deployment: an auto-approved ₹349 order, a ₹1,299
+order held and then approved by hand, and a ₹2,499 order blocked by the
+per-transaction cap without ever reaching Razorpay — with the audit trail
+persisted in Neon.
 
 **Free-tier note:** Render free web services sleep when idle and take ~50s to
 wake. Hit `/health` a minute before demoing.
