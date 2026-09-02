@@ -22,6 +22,9 @@ redis==8.1.0
 # ---- Payments (TEST MODE ONLY) ----
 razorpay==2.0.1
 
+# ---- Agent interoperability (MCP server) ----
+mcp==2.1.1
+
 # ---- Agent orchestration ----
 langgraph==1.2.11
 anthropic==1.2.0

@@ -13,7 +13,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.orders import MAX_QUANTITY, OrderError
+from app.services.orders import MAX_QUANTITY, OrderError, get_order, serialise_order
 from app.services.orders import create_order as _create_order
 from app.services.orders import verify_payment as _verify_payment
 from app.tools.base import ToolError, ToolSpec, registry
@@ -31,6 +31,13 @@ refused even when the buyer agreed — if it is, tell the buyer plainly what lim
 was hit and what they can do instead.
 
 Returns the order and the checkout parameters the buyer needs to pay."""
+
+GET_ORDER_STATUS_DESCRIPTION = """\
+Look up the current state of an order you created.
+
+Read-only and safe to poll. Use it to find out whether a buyer has completed payment, whether an order is still waiting on human approval, or why one failed. Returns the status, the amount, and any failure code and reason.
+
+Statuses: pending_approval (waiting on a human), created, awaiting_payment, paid, failed, cancelled, blocked (refused by a spend guardrail)."""
 
 VERIFY_PAYMENT_DESCRIPTION = """\
 Verify a completed payment's signature and settle the order.
@@ -99,6 +106,41 @@ async def verify_payment(
     except OrderError as exc:
         raise _as_tool_error(exc) from exc
 
+
+async def get_order_status(session: AsyncSession, order_id: str) -> dict[str, Any]:
+    """Fetch one order's current state. Read-only."""
+    if not order_id or not order_id.strip():
+        raise ToolError("invalid_arguments", "order_id is required")
+
+    order = await get_order(session, order_id.strip())
+    if order is None:
+        raise ToolError(
+            "order_not_found",
+            f"No order with id {order_id!r}.",
+            details={"order_id": order_id},
+        )
+    return {"order": serialise_order(order)}
+
+
+registry.register(
+    ToolSpec(
+        name="get_order_status",
+        description=GET_ORDER_STATUS_DESCRIPTION,
+        input_schema={
+            "type": "object",
+            "properties": {
+                "order_id": {
+                    "type": "string",
+                    "description": "The 'ord-...' id returned by create_order.",
+                }
+            },
+            "required": ["order_id"],
+            "additionalProperties": False,
+        },
+        handler=get_order_status,
+        mutates_money=False,
+    )
+)
 
 registry.register(
     ToolSpec(

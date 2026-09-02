@@ -208,6 +208,7 @@ does not put `-pooler` in the host — set `PGBOUNCER_MODE=true` there.
 ## Docs
 
 - [docs/architecture.md](docs/architecture.md) — diagrams, the money path, and why each decision was made
+- [docs/mcp.md](docs/mcp.md) — the MCP server, and why interoperability is the point
 - [docs/demo-script.md](docs/demo-script.md) — the 5-minute walkthrough
 
 ---
@@ -303,6 +304,27 @@ Talk to the agent over `POST /chat`, which streams Server-Sent Events —
 `conversation`, `intent`, `message`, `tool_call`, `tool_result`, `products`,
 `order`, `done`, `error`, `end`. Once the stream has opened, failures arrive as
 `error` events rather than status codes.
+
+## Transactable by any agent, not just ours
+
+The merchant is exposed over the **Model Context Protocol**, so Claude Desktop,
+the MCP Inspector, or any other MCP client can discover the catalog and complete
+a purchase — with no code shared with the AutoBuy chat UI.
+
+```bash
+cd backend && python -m app.mcp.server                              # Claude Desktop
+cd backend && python -m app.mcp.server --transport streamable-http  # Inspector
+```
+
+**Every MCP tool runs through the same service layer our own agent uses.** The
+spend caps, the approval gate, the audit trail and the idempotency keys are
+properties of that layer, not of the caller — so an external agent gets exactly
+the same refusals and the same audit rows. A test fails the build if a tool is
+ever registered for our agent but not exposed to everyone else.
+
+Verified with a client importing only the MCP SDK: it discovered six tools cold,
+placed a real Razorpay test order, and was refused on the ₹2,499 item by the
+per-transaction cap. Details in [docs/mcp.md](docs/mcp.md).
 
 ## Bounded, gated, audited
 
@@ -436,4 +458,9 @@ is deliberately not a dependency — one less wrapper between this code and the 
 - [x] **M2** — LangGraph purchasing agent + Razorpay order/verify tools
 - [x] **M3** — Conversational checkout UI + merchant dashboard
 - [x] **M4** — Spend caps, approval gating, audit trail, graceful failure
-- [ ] **M5** — Deploy + demo assets
+- [x] **M5** — Deploy, architecture doc, demo script
+
+Beyond the brief:
+
+- [x] **M6** — MCP server: the merchant is transactable by *any* agent
+- [ ] **M7** — Consent grant + instant revocation of purchasing authority

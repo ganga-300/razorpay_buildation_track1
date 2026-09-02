@@ -18,6 +18,7 @@ GATED_NODES = {"create_order", "verify_payment"}
 def test_every_expected_tool_is_registered() -> None:
     assert registry.names() == [
         "create_order",
+        "get_order_status",
         "get_product",
         "search_catalog",
         "verify_payment",
@@ -33,6 +34,8 @@ def test_read_only_tools_are_not_flagged_as_money_tools() -> None:
     money = set(registry.money_tools())
     assert "search_catalog" not in money
     assert "get_product" not in money
+    # Polling an order's status is a read; it must never be gated as spend.
+    assert "get_order_status" not in money
 
 
 def test_tool_definitions_render_for_the_messages_api() -> None:

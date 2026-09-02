@@ -52,6 +52,8 @@ logger = logging.getLogger(__name__)
 TOOL_PHASES: dict[str, str] = {
     "search_catalog": "search_catalog",
     "get_product": "search_catalog",
+    # Read-only, so it belongs on the non-money node despite the name.
+    "get_order_status": "search_catalog",
     "create_order": "create_order",
     "verify_payment": "verify_payment",
 }

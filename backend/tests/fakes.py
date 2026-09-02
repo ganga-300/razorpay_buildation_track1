@@ -127,6 +127,7 @@ class FakeRazorpay:
         self.order_id = order_id
         self.created: list[dict[str, Any]] = []
         self.verified: list[dict[str, Any]] = []
+        self.issued_ids: list[str] = []
 
     @property
     def configured(self) -> bool:
@@ -150,8 +151,16 @@ class FakeRazorpay:
         )
         if self.fail_create is not None:
             raise self.fail_create
+
+        # Razorpay issues a distinct id per order, and `orders.razorpay_order_id`
+        # is UNIQUE. A fake that returns one id forever makes a second order
+        # blow up on the constraint — a defect in the double, not the code.
+        # The first id is `order_id` verbatim so tests can assert against it.
+        issued = self.order_id if not self.issued_ids else f"{self.order_id}-{len(self.issued_ids)}"
+        self.issued_ids.append(issued)
+
         return {
-            "id": self.order_id,
+            "id": issued,
             "amount": amount_minor,
             "currency": currency,
             "receipt": receipt,
