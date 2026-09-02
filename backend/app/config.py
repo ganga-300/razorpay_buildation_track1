@@ -80,6 +80,14 @@ class Settings(BaseSettings):
     provider_max_attempts: int = 2
     provider_retry_base_delay: float = 0.5
 
+    # ---- Consent lifecycle ----
+    # Require an explicit, unexpired grant before the agent may spend at all.
+    # On by default: purchasing authority a buyer never gave is not something
+    # anyone should have to opt out of.
+    require_agent_grant: bool = True
+    default_grant_cap_minor: int = 500_000        # ₹5,000.00
+    default_grant_hours: int = 24
+
     # ---- Guardrails (wired up fully in Milestone 4) ----
     # Amounts are in the currency's minor unit (paise for INR).
     auto_approve_limit_minor: int = Field(default=50_000)      # ₹500.00

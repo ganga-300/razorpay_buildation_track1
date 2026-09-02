@@ -163,13 +163,19 @@ async def test_the_daily_cap_check_uses_the_running_total_not_the_amount(
 # --------------------------------------------------------------------------
 
 
-async def test_every_decision_reports_all_three_bounds(
+async def test_every_decision_reports_every_bound(
     db_session: AsyncSession,
 ) -> None:
-    """A decision must be explainable, not just correct."""
+    """A decision must be explainable, not just correct.
+
+    `agent_authority` is reported alongside the amount caps so a revocation
+    appears in the trail with the same shape as a breached limit, rather than as
+    a special case nobody thinks to look for.
+    """
     for amount in (10_000, 129_900, 249_900):
         decision = await evaluate(db_session, amount_minor=amount)
         assert {c.name for c in decision.checks} == {
+            "agent_authority",
             "per_transaction_cap",
             "daily_cap",
             "auto_approve_limit",

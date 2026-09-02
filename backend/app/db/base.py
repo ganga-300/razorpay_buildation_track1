@@ -17,6 +17,26 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def as_utc(value: datetime | None) -> datetime | None:
+    """Re-attach UTC to a datetime that lost its timezone in the database.
+
+    SQLite has no timezone type, so a `DateTime(timezone=True)` column hands
+    back a naive value on the way out. Serialised naively, the browser reads it
+    as *local* time — a 24-hour grant displays as "18h left" in IST, and audit
+    timestamps appear shifted by the UTC offset. In a trail whose whole purpose
+    is saying exactly when something happened, that is not cosmetic.
+    """
+    if value is None:
+        return None
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+
+
+def utc_iso(value: datetime | None) -> str | None:
+    """ISO-8601 with an explicit UTC offset, safe for any client to parse."""
+    aware = as_utc(value)
+    return aware.isoformat() if aware else None
+
+
 class Base(DeclarativeBase):
     """Base class for all ORM models."""
 

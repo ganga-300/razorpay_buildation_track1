@@ -9,6 +9,8 @@
 import type {
   ApprovalResponse,
   AuditListResponse,
+  Grant,
+  GrantListResponse,
   HealthResponse,
   Order,
   OrderListResponse,
@@ -126,6 +128,34 @@ export function declineOrder(
   reason?: string,
 ): Promise<ApprovalResponse> {
   return apiFetch<ApprovalResponse>(`/orders/${orderId}/decline`, {
+    method: "POST",
+    body: JSON.stringify({ actor, reason: reason ?? null }),
+  });
+}
+
+// ---------------------------------------------------------- consent
+
+export function getGrants(): Promise<GrantListResponse> {
+  return apiFetch<GrantListResponse>("/grants", { cache: "no-store" });
+}
+
+export function grantAccess(payload: {
+  spend_cap_minor: number;
+  expires_in_hours: number;
+  note?: string;
+}): Promise<Grant> {
+  return apiFetch<Grant>("/grants", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function revokeGrant(
+  grantId: string,
+  actor = "buyer",
+  reason?: string,
+): Promise<Grant> {
+  return apiFetch<Grant>(`/grants/${grantId}/revoke`, {
     method: "POST",
     body: JSON.stringify({ actor, reason: reason ?? null }),
   });

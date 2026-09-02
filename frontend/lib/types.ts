@@ -192,6 +192,36 @@ export interface ApprovalResponse {
   approved_by: string | null;
 }
 
+// ------------------------------------------------- consent lifecycle
+
+export type GrantStatus = "active" | "revoked" | "expired";
+
+export interface Grant {
+  id: string;
+  buyer_id: string;
+  merchant_id: string;
+  agent_id: string;
+  status: GrantStatus;
+  /** Active AND unexpired. `status` alone is not enough — expiry is time-based. */
+  is_live: boolean;
+  spend_cap: Money;
+  spent: Money;
+  remaining: Money;
+  used_fraction: number;
+  expires_at: string | null;
+  revoked_at: string | null;
+  revoked_by: string | null;
+  revoke_reason: string | null;
+  note: string | null;
+  created_at: string | null;
+}
+
+export interface GrantListResponse {
+  count: number;
+  active: Grant | null;
+  grants: Grant[];
+}
+
 // ----------------------------------------------------------- chat / SSE
 
 export type AgentIntent = "browse" | "purchase" | "verify" | "cancel" | "other";

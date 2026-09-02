@@ -326,6 +326,50 @@ Verified with a client importing only the MCP SDK: it discovered six tools cold,
 placed a real Razorpay test order, and was refused on the ₹2,499 item by the
 per-transaction cap. Details in [docs/mcp.md](docs/mcp.md).
 
+## Consent: granted, spent, revoked
+
+The spend caps bound *how much* can move. A grant bounds something prior:
+**whether the agent may act at all**, and for how long.
+
+```
+buyer grants ₹5,000 for 24h  ->  agent buys freely inside it, no re-approval
+                             ->  buyer revokes  ->  the very next order fails
+```
+
+`AgentGrant` carries a cap and an expiry. Spend is **summed from the orders that
+reference it**, never kept as a running counter — a counter drifts the first time
+an order fails between increment and rollback.
+
+**Revocation is instant and unconditional.** No confirmation step, no cooling-off
+period, nothing cached: the next `create_order` fails the authority check, and an
+order already waiting for approval fails when you try to approve it. An authority
+you cannot withdraw immediately is not a grant, it is a transfer.
+
+Authority is checked as a **bound like any other**, so a revocation appears in
+the audit trail with the same shape as a breached cap rather than as a special
+case nobody thinks to look for:
+
+```
+Agent authority        ₹349.00 / ₹0.00      ← failed
+Per-transaction cap    ₹349.00 / ₹2,000.00
+Daily cap (24h)        ₹698.00 / ₹10,000.00
+Auto-approve limit     ₹349.00 / ₹500.00
+```
+
+Grants and revocations are audited alongside orders, in the same table:
+
+```
+grant_access   allow -> succeeded  ₹5,000.00  by=buyer
+create_order   allow -> succeeded    ₹349.00
+revoke_access  allow -> succeeded  ₹4,651.00  by=buyer
+               ₹4,651.00 of unspent authority withdrawn; ₹349.00 had been used.
+create_order   block -> blocked      ₹349.00
+               The agent has no active purchasing authority.
+```
+
+A trail that shows money moving but not who authorised it, or when that
+authority was withdrawn, explains only half of what happened.
+
 ## Bounded, gated, audited
 
 Every money action runs the same sequence, and the ordering is load-bearing:
@@ -463,4 +507,4 @@ is deliberately not a dependency — one less wrapper between this code and the 
 Beyond the brief:
 
 - [x] **M6** — MCP server: the merchant is transactable by *any* agent
-- [ ] **M7** — Consent grant + instant revocation of purchasing authority
+- [x] **M7** — Consent grant + instant revocation of purchasing authority

@@ -15,7 +15,7 @@ from app.agents.llm import get_agent_client
 from app.agents.purchasing_agent import AgentDeps, run_turn
 from app.agents.scripted_planner import ScriptedPlanner, _price_ceiling
 from app.config import settings
-from app.db.models import AuditDecision, AuditLog, AuditOutcome, OrderStatus
+from app.db.models import AuditAction, AuditDecision, AuditLog, AuditOutcome, OrderStatus
 from tests.fakes import FakeRazorpay
 
 pytestmark = pytest.mark.asyncio
@@ -123,13 +123,24 @@ async def test_the_audit_trail_is_written_the_same_way(
     _, state = await drive(db_session, "show me noise cancelling headphones")
     await drive(db_session, "buy the headphones", history=state["messages"])
 
-    entries = list((await db_session.execute(select(AuditLog))).scalars().all())
+    entries = list(
+        (
+            await db_session.execute(
+                # Money actions only: the fixture seeds a consent grant, which
+                # shares this table by design.
+                select(AuditLog).where(AuditLog.action == AuditAction.CREATE_ORDER)
+            )
+        )
+        .scalars()
+        .all()
+    )
     assert len(entries) == 1
     entry = entries[0]
     assert entry.decision is AuditDecision.BLOCK
     assert entry.outcome is AuditOutcome.BLOCKED
     assert entry.agent_id == "purchasing-agent"
     assert {c["name"] for c in entry.checks} == {
+        "agent_authority",
         "per_transaction_cap",
         "daily_cap",
         "auto_approve_limit",

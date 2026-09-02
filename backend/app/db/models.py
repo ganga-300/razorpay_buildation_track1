@@ -12,7 +12,7 @@ from typing import Any
 
 from enum import StrEnum
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     Boolean,
@@ -29,7 +29,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import JSON
 
-from app.db.base import Base, TimestampMixin, utcnow
+from app.db.base import Base, TimestampMixin, as_utc, utcnow
 
 # Portable JSON: JSONB on Postgres (indexable, binary), plain JSON on SQLite.
 JSONType = JSON().with_variant(JSONB(), "postgresql")
@@ -46,6 +46,8 @@ __all__ = [
     "AuditAction",
     "AuditDecision",
     "AuditOutcome",
+    "AgentGrant",
+    "GrantStatus",
 ]
 
 
@@ -151,6 +153,11 @@ class Order(Base, TimestampMixin):
         String(64), nullable=True, index=True
     )
     agent_id: Mapped[str] = mapped_column(String(64), nullable=False, default="purchasing-agent")
+
+    # The authority this order was placed under. Nullable because an order the
+    # guardrails refused may never have had one — and that refusal is exactly
+    # what needs recording.
+    grant_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     receipt: Mapped[str] = mapped_column(String(64), nullable=False)
     idempotency_key: Mapped[str | None] = mapped_column(
         String(128), nullable=True, unique=True, index=True
@@ -203,10 +210,18 @@ class Conversation(Base, TimestampMixin):
 
 
 class AuditAction(StrEnum):
-    """The money action an audit entry describes."""
+    """The money action an audit entry describes.
+
+    Granting and revoking authority are recorded with the same rigour as a
+    purchase: they are the decisions that make every later purchase possible,
+    and an audit trail that shows spending but not who authorised it explains
+    nothing.
+    """
 
     CREATE_ORDER = "create_order"
     VERIFY_PAYMENT = "verify_payment"
+    GRANT_ACCESS = "grant_access"
+    REVOKE_ACCESS = "revoke_access"
 
 
 class AuditDecision(StrEnum):
@@ -303,3 +318,69 @@ class AuditLog(Base, TimestampMixin):
             f"<AuditLog {self.id} {self.action}/{self.decision}"
             f"/{self.outcome} {self.amount_minor}{self.currency}>"
         )
+
+
+class GrantStatus(StrEnum):
+    """Lifecycle of an agent's purchasing authority."""
+
+    ACTIVE = "active"
+    REVOKED = "revoked"
+    EXPIRED = "expired"
+
+
+class AgentGrant(Base, TimestampMixin):
+    """Explicit, revocable authority for an agent to spend on a buyer's behalf.
+
+    This is the consent lifecycle: a buyer grants a capped, expiring allowance
+    once, the agent transacts freely inside it without re-approving every
+    purchase, and the buyer can revoke it instantly. It sits *above* the
+    per-transaction and daily caps — those bound how much can move at a time;
+    this bounds whether the agent may act at all.
+
+    Spend against a grant is **computed from the orders that reference it**
+    rather than kept as a running counter. A counter can drift from reality
+    after a failure; a sum cannot.
+    """
+
+    __tablename__ = "agent_grants"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+
+    buyer_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    merchant_id: Mapped[str] = mapped_column(String(64), nullable=False, default="autobuy")
+    agent_id: Mapped[str] = mapped_column(String(64), nullable=False, default="purchasing-agent")
+
+    spend_cap_minor: Mapped[int] = mapped_column(Integer, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="INR")
+
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    status: Mapped[GrantStatus] = mapped_column(
+        SAEnum(GrantStatus, native_enum=False, length=32),
+        nullable=False,
+        default=GrantStatus.ACTIVE,
+        index=True,
+    )
+
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    revoked_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    revoke_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("spend_cap_minor > 0", name="ck_grants_cap_positive"),
+        Index("ix_grants_buyer_status", "buyer_id", "status"),
+    )
+
+    def is_live(self, now: datetime | None = None) -> bool:
+        """True only if the grant is active AND has not expired."""
+        moment = now or utcnow()
+        # SQLite hands back naive datetimes; compare like with like.
+        expires = as_utc(self.expires_at)
+        return self.status is GrantStatus.ACTIVE and expires is not None and expires > moment
+
+    def __repr__(self) -> str:  # pragma: no cover — debugging aid
+        return f"<AgentGrant {self.id} {self.status} cap={self.spend_cap_minor}>"

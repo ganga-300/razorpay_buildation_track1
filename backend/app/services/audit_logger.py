@@ -23,7 +23,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.base import utcnow
+from app.db.base import utc_iso, utcnow
 from app.db.models import AuditAction, AuditDecision, AuditLog, AuditOutcome
 from app.services.guardrails import GuardrailDecision
 from app.services.money import format_money
@@ -233,7 +233,7 @@ def serialise(entry: AuditLog) -> dict[str, Any]:
         "checks": entry.checks or [],
         "reason": entry.reason,
         "approved_by": entry.approved_by,
-        "approved_at": entry.approved_at.isoformat() if entry.approved_at else None,
+        "approved_at": utc_iso(entry.approved_at),
         "failure": (
             {"code": entry.failure_code, "reason": entry.failure_reason}
             if entry.failure_code or entry.failure_reason
@@ -241,5 +241,56 @@ def serialise(entry: AuditLog) -> dict[str, Any]:
         ),
         "attempts": entry.attempts,
         "duration_ms": entry.duration_ms,
-        "created_at": entry.created_at.isoformat() if entry.created_at else None,
+        "created_at": utc_iso(entry.created_at),
     }
+
+
+async def record_consent_event(
+    session: AsyncSession,
+    *,
+    action: AuditAction,
+    grant_id: str,
+    amount_minor: int,
+    currency: str,
+    actor: str,
+    reason: str,
+    checks: list[dict[str, Any]] | None = None,
+) -> AuditLog:
+    """Record a grant or a revocation in the same trail as every purchase.
+
+    Consent events are terminal the instant they happen — there is no pending
+    state to update afterwards — so unlike an order this writes a completed
+    entry in one step.
+
+    They belong in the same table as orders because they are what makes the
+    orders legitimate. A trail that shows money moving but not who authorised it,
+    or when that authority was withdrawn, explains only half of what happened.
+    """
+    entry = AuditLog(
+        id=new_audit_id(),
+        agent_id="purchasing-agent",
+        action=action,
+        decision=AuditDecision.ALLOW,
+        outcome=AuditOutcome.SUCCEEDED,
+        order_id=None,
+        amount_minor=amount_minor,
+        currency=currency,
+        checks=checks or [],
+        reason=reason,
+        approved_by=actor,
+        approved_at=utcnow(),
+        attempts=0,
+        idempotency_key=grant_id,
+    )
+    session.add(entry)
+    await session.commit()
+
+    logger.info(
+        "AUDIT %s %s grant=%s by=%s: %s",
+        entry.id,
+        action.value,
+        grant_id,
+        actor,
+        reason,
+    )
+    return entry

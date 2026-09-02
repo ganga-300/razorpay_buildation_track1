@@ -199,6 +199,7 @@ async def test_the_approval_gate_reaches_the_browser(
     guardrail = payload(frames, "guardrail")
     assert guardrail["blocked"] is False
     assert {c["name"] for c in guardrail["checks"]} == {
+        "agent_authority",
         "per_transaction_cap",
         "daily_cap",
         "auto_approve_limit",

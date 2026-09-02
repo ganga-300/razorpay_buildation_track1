@@ -41,11 +41,14 @@ CANCEL_WORDS = {"cancel", "cancelled", "no thanks", "never mind", "stop", "forge
 # reduces a good query to zero results.
 STOPWORDS = {
     # conversational filler
-    "a", "an", "and", "any", "anything", "are", "buy", "can", "could", "do",
+    "a", "again", "an", "and", "another", "any", "anything", "are", "buy",
+    "can", "could", "do",
     "find", "for", "get", "got", "have", "hey", "hi", "i", "in", "is", "it",
+    "more", "one",
     "like", "look", "looking", "me", "my", "need", "of", "on", "one", "or",
     "order", "please", "purchase", "recommend", "search", "see", "show",
-    "similar", "some", "something", "suggest", "that", "the", "there", "this",
+    "similar", "some", "something", "suggest", "that", "the", "then", "there",
+    "this",
     "to", "want", "what", "which", "with", "would", "you", "your",
     # budget phrasing — already captured by _price_ceiling, and useless in a
     # query where every token must match

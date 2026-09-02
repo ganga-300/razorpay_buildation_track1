@@ -2,6 +2,7 @@ import { cn } from "@/lib/cn";
 import type { BoundCheck } from "@/lib/types";
 
 const LABELS: Record<string, string> = {
+  agent_authority: "Agent authority",
   per_transaction_cap: "Per-transaction cap",
   daily_cap: "Daily cap (24h)",
   auto_approve_limit: "Auto-approve limit",

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { AgentAccess } from "@/components/dashboard/AgentAccess";
 import { AuditTable } from "@/components/dashboard/AuditTable";
 import { OrdersTable } from "@/components/dashboard/OrdersTable";
 import { SpendMeter } from "@/components/dashboard/SpendMeter";
@@ -10,9 +11,9 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
-import { getAudit, getOrders } from "@/lib/api";
+import { getAudit, getGrants, getOrders } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import type { AuditListResponse, OrderListResponse } from "@/lib/types";
+import type { AuditListResponse, Grant, OrderListResponse } from "@/lib/types";
 
 type Tab = "orders" | "audit";
 
@@ -28,18 +29,21 @@ export default function DashboardPage() {
   const [decision, setDecision] = useState("");
   const [orders, setOrders] = useState<OrderListResponse | null>(null);
   const [audit, setAudit] = useState<AuditListResponse | null>(null);
+  const [grant, setGrant] = useState<Grant | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [o, a] = await Promise.all([
+      const [o, a, g] = await Promise.all([
         getOrders(),
         getAudit(decision ? { decision } : {}),
+        getGrants(),
       ]);
       setOrders(o);
       setAudit(a);
+      setGrant(g.active);
       setError(null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not load data.");
@@ -75,6 +79,12 @@ export default function DashboardPage() {
           {error}
         </Card>
       ) : null}
+
+      {/* Authority first: whether the agent may act at all comes before how
+          much it may spend. */}
+      <div className="mb-4">
+        <AgentAccess grant={grant} onChanged={load} />
+      </div>
 
       {audit ? (
         <div className="mb-4">

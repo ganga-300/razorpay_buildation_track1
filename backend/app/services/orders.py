@@ -31,6 +31,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.db.base import utc_iso
 from app.db.models import AuditAction, AuditLog, Order, OrderStatus, Product
 from app.services import audit_logger, guardrails
 from app.services.audit_logger import AuditSpan
@@ -99,7 +100,7 @@ def serialise_order(order: Order) -> dict[str, Any]:
             if order.failure_code
             else None
         ),
-        "created_at": order.created_at.isoformat() if order.created_at else None,
+        "created_at": utc_iso(order.created_at),
     }
 
 
@@ -332,6 +333,7 @@ async def create_order(
         status=OrderStatus.CREATED,
         conversation_id=conversation_id,
         agent_id=AGENT_ID,
+        grant_id=decision.grant_id,
         receipt=receipt_for(new_order_id()),
         idempotency_key=idempotency_key,
         attempts=0,
@@ -429,6 +431,8 @@ async def approve_order(
         session, amount_minor=order.amount_minor, currency=order.currency, agent_id=AGENT_ID
     )
     if recheck.blocked:
+        # Includes the authority check, so revoking while an order waits for
+        # approval makes approving it fail rather than quietly succeed.
         order.status = OrderStatus.BLOCKED
         order.failure_code = "spend_blocked"
         order.failure_reason = recheck.reason

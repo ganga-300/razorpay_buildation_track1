@@ -133,6 +133,41 @@ stays truthful after the configured caps change.
 
 ---
 
+## 3b. Prior to any cap: does the agent have authority at all?
+
+`services/grants.py` implements the consent lifecycle — grant, spend inside it,
+revoke.
+
+```
+buyer grants ₹5,000 for 24h  ->  agent transacts freely inside it
+                             ->  buyer revokes  ->  next order fails
+```
+
+An `AgentGrant` carries a cap and an expiry. Spend against it is **summed from
+the orders that reference it** (`orders.grant_id`), never kept as a running
+counter: a counter drifts the first time an order fails between increment and
+rollback, and a drifted allowance is worse than none.
+
+Three properties are deliberate:
+
+**Authority is a bound, not a special case.** It is evaluated inside
+`guardrails.evaluate()` and reported as `agent_authority` alongside the amount
+caps, so a revocation surfaces in the audit trail with the same shape as a
+breached limit. Anything special-cased is something an auditor has to know to
+look for.
+
+**Revocation is instant and unconditional.** Nothing is cached, so there is no
+window in which a revoked agent can still spend. The check runs on the next
+`create_order` — and, critically, again at approval time, so revoking while an
+order waits for a human makes approving it fail rather than silently succeed.
+
+**Expiry bites when it passes**, evaluated on read rather than by a sweeper, and
+settled lazily to `EXPIRED` so the dashboard reads truthfully.
+
+Granting and revoking are written to the same `audit_logs` table as purchases.
+A trail that shows money moving but not who authorised it, or when that
+authority was withdrawn, explains only half of what happened.
+
 ## 4. Gated: human approval
 
 Approval is a `POST /orders/{id}/approve` against a specific order id.
@@ -318,3 +353,60 @@ See the [root README](../README.md) for setup, and
 cd backend && pytest        # 158 tests
 cd frontend && npm run test # 7 tests
 ```
+
+
+---
+
+## 11. What this does beyond the brief, and why
+
+The track brief asks for an agent-readable catalog and a conversational
+checkout. Two additions go past it deliberately, and both mirror what Razorpay's
+own production pilot treats as non-negotiable rather than being invented novelty.
+
+### Protocol interoperability, not a better chatbot
+
+Razorpay's Agentic Payments pilot works because Claude — an **external** AI
+client — discovers and calls the merchant's tools directly. That is the MCP
+pattern, not a bespoke bot wired to one agent.
+
+So the merchant is exposed as an MCP server (`docs/mcp.md`). A cold client
+importing only the MCP SDK discovers the catalog and completes a real purchase,
+sharing no code with the AutoBuy chat UI — and gets exactly the same caps,
+refusals and audit rows, because those live in the service layer rather than in
+the caller.
+
+The distinction matters: a chat UI wired to your own agent proves you can build
+an agent. This proves the **merchant** is transactable, which is what
+agent-to-agent commerce actually requires.
+
+The wider protocol landscape is fragmented — x402, ACP, TAP, AP2, and NPCI's own
+Unified Agent Protocol are all live proposals. This does not pick a winner. It
+demonstrates the property that survives whichever wins: a merchant whose tools
+any agent can discover and call, with enforcement that does not depend on which
+protocol the caller used.
+
+### Consent lifecycle, because caps alone are not trust
+
+Razorpay names four things that make agentic payments safe: a single
+confirmation before an order, a user-defined spending limit, **instant
+revocation**, and real-time visibility.
+
+Milestone 4 covered confirmation, limits and visibility. Revocation was missing
+— and it is the one that makes the others credible, because a limit you cannot
+withdraw is a limit you have already committed to. Milestone 7 adds it as a
+first-class, demonstrable control.
+
+### What a v2 would add, and why not now
+
+Deliberately **not** built, with three days to submission:
+
+- **Signed mandates (AP2-style).** Cryptographically signed authorisation, so a
+  grant is verifiable by a third party rather than trusted because our database
+  says so. The right next step; too much implementation risk this week.
+- **A second payment-protocol adapter** (ACP, x402). The architecture already
+  separates the protocol surface from enforcement, so a second adapter is
+  additive rather than invasive. Knowing that is worth more right now than a
+  rushed second integration.
+- **Anomaly detection on agent behaviour** — an agent buying at 3am, or a spend
+  pattern unlike the buyer's history. A real risk surface, and squarely Track
+  2's territory rather than this one's.

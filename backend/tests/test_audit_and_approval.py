@@ -27,12 +27,22 @@ from tests.fakes import FakeRazorpay
 pytestmark = pytest.mark.asyncio
 
 
+MONEY_ACTIONS = (AuditAction.CREATE_ORDER, AuditAction.VERIFY_PAYMENT)
+
+
 async def entries(session: AsyncSession) -> list[AuditLog]:
-    return list(
-        (await session.execute(select(AuditLog).order_by(AuditLog.created_at)))
-        .scalars()
-        .all()
+    """Audit entries for money actions only.
+
+    Consent events (grant/revoke) share this table by design, and the test
+    fixture seeds a grant, so counting every row would make these assertions
+    about the fixture rather than about the behaviour under test.
+    """
+    stmt = (
+        select(AuditLog)
+        .where(AuditLog.action.in_(MONEY_ACTIONS))
+        .order_by(AuditLog.created_at)
     )
+    return list((await session.execute(stmt)).scalars().all())
 
 
 # ==========================================================================
@@ -89,7 +99,12 @@ async def test_the_audit_entry_snapshots_the_bounds_it_checked(
 
     entry = (await entries(db_session))[0]
     names = {c["name"] for c in entry.checks}
-    assert names == {"per_transaction_cap", "daily_cap", "auto_approve_limit"}
+    assert names == {
+        "agent_authority",
+        "per_transaction_cap",
+        "daily_cap",
+        "auto_approve_limit",
+    }
 
     per_txn = next(c for c in entry.checks if c["name"] == "per_transaction_cap")
     assert per_txn["limit_minor"] == settings.per_transaction_cap_minor
@@ -443,7 +458,7 @@ async def test_audit_endpoint_returns_the_trail_and_budget(
     with pytest.raises(OrderError):
         await create_order(db_session, product_id="prd-headphones", quantity=1)
 
-    body = (await client.get("/audit")).json()
+    body = (await client.get("/audit", params={"action": "create_order"})).json()
     assert body["count"] == 2
     assert body["summary"]["by_decision"] == {"allow": 1, "block": 1}
     assert body["summary"]["blocked_amount"]["amount_minor"] == 249_900

@@ -10,6 +10,52 @@ test suite were both true while the chat UI rendered nothing at all.
 
 ---
 
+## M7 · A 24-hour grant displayed as "18h left"
+
+**Broke:** Granting 24 hours of authority showed `1d left` as `18h left` — off
+by exactly the IST offset. Audit timestamps were shifted the same way.
+
+**Cause:** SQLite has no timezone type, so a `DateTime(timezone=True)` column
+hands back a **naive** datetime. Serialised naively, the browser parses it as
+*local* time rather than UTC.
+
+**Fix:** `as_utc()` / `utc_iso()` in `db/base.py`, applied in every serialiser.
+In a trail whose entire purpose is saying when something happened, timestamps
+silently shifted by the local offset are a correctness bug, not a cosmetic one.
+
+**Lesson:** This was invisible on the deployed instance, where the server is UTC
+and so is the comparison. It only appeared when a browser in IST rendered it.
+
+---
+
+## M7 · The local frontend was talking to the deployed backend
+
+**Broke:** Chat hung with no events. The backend log showed no request at all.
+
+**Cause:** `frontend/.env.local` pointed at the Render URL — correct for testing
+the deployment, wrong for verifying local changes. The browser's request went to
+production, where CORS only allows the Vercel origin, so it was blocked before
+it left.
+
+**Fix:** Point it at `http://localhost:8000` while verifying locally. Worth
+recording because the symptom (a hung stream) looks nothing like the cause (a
+config file pointing somewhere else entirely).
+
+---
+
+## M7 · "buy another usb-c cable" found nothing
+
+**Broke:** The scripted planner searched for `"another cable"` and matched zero
+products.
+
+**Cause:** `another` was not in the stopword list, and catalog search ANDs every
+token — so one stray conversational word reduces a good query to nothing. The
+same family of bug as the earlier `"c cable show usb"` failure.
+
+**Fix:** Added `another`, `again`, `more`, `then`, `one` to the stopwords.
+
+---
+
 ## M6 · The MCP SDK is on 2.x and the API moved
 
 **Broke:** `from mcp.server.fastmcp import FastMCP` — `ModuleNotFoundError`.

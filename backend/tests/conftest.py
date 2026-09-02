@@ -112,6 +112,19 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         session.add_all([Product(**row) for row in TEST_PRODUCTS])  # type: ignore[arg-type]
         await session.commit()
 
+        # A live grant, so tests written before the consent lifecycle existed
+        # still exercise what they were written for. Without one, every order
+        # test would fail on `agent_authority` rather than on the rule it is
+        # actually asserting. Consent tests revoke or expire this deliberately.
+        from app.services.grants import grant_access
+
+        await grant_access(
+            session,
+            spend_cap_minor=10_000_00,
+            expires_in_hours=24,
+            note="Seeded by the test fixture.",
+        )
+
     async with SessionLocal() as session:
         yield session
 

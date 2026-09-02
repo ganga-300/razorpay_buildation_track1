@@ -13,7 +13,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import AuditDecision, AuditLog, Order, OrderStatus
+from app.db.models import AuditAction, AuditDecision, AuditLog, Order, OrderStatus
 from app.mcp.server import MCP_CONVERSATION_PREFIX, build_server
 from app.tools import registry
 from tests.fakes import FakeRazorpay
@@ -158,7 +158,17 @@ async def test_mcp_orders_are_audited_and_attributable(
 ) -> None:
     await call("create_order", {"product_id": "prd-cable"})
 
-    entries = list((await db_session.execute(select(AuditLog))).scalars().all())
+    entries = list(
+        (
+            await db_session.execute(
+                # Money actions only: the fixture seeds a consent grant, which
+                # shares this table by design.
+                select(AuditLog).where(AuditLog.action == AuditAction.CREATE_ORDER)
+            )
+        )
+        .scalars()
+        .all()
+    )
     assert len(entries) == 1
     assert entries[0].decision is AuditDecision.ALLOW
     # Attributable to MCP, so the dashboard can tell an external agent's
@@ -171,7 +181,17 @@ async def test_a_blocked_mcp_order_is_recorded_too(
 ) -> None:
     await call("create_order", {"product_id": "prd-headphones"})
 
-    entries = list((await db_session.execute(select(AuditLog))).scalars().all())
+    entries = list(
+        (
+            await db_session.execute(
+                # Money actions only: the fixture seeds a consent grant, which
+                # shares this table by design.
+                select(AuditLog).where(AuditLog.action == AuditAction.CREATE_ORDER)
+            )
+        )
+        .scalars()
+        .all()
+    )
     assert len(entries) == 1
     assert entries[0].decision is AuditDecision.BLOCK
 
