@@ -209,6 +209,7 @@ does not put `-pooler` in the host — set `PGBOUNCER_MODE=true` there.
 
 - [docs/architecture.md](docs/architecture.md) — diagrams, the money path, and why each decision was made
 - [docs/mcp.md](docs/mcp.md) — the MCP server, and why interoperability is the point
+- [docs/demo-clips.md](docs/demo-clips.md) — the two differentiation clips, scripted beat by beat
 - [docs/demo-script.md](docs/demo-script.md) — the 5-minute walkthrough
 
 ---

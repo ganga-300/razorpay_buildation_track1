@@ -10,6 +10,24 @@ test suite were both true while the chat UI rendered nothing at all.
 
 ---
 
+## M8 · The reset script granted access to the wrong database
+
+**Broke:** `demo/reset.py --granted` reported success, but the server saw no
+grant and the agent stayed blocked.
+
+**Cause:** `DATABASE_URL` is a **relative** SQLite path. Alembic ran with
+`cwd=backend/` and migrated `backend/autobuy.db`; the grant step imported the app
+from the repo root, where `./autobuy.db` resolved to a different, empty file. Two
+databases, both "correct", neither shared.
+
+**Fix:** `os.chdir(BACKEND)` before importing the app.
+
+**Lesson:** A relative path in a connection string is a function of the working
+directory, not of the project. Anything that shells out and then imports the app
+has to agree on where it is standing.
+
+---
+
 ## M7 · A 24-hour grant displayed as "18h left"
 
 **Broke:** Granting 24 hours of authority showed `1d left` as `18h left` — off
