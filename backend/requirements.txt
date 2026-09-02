@@ -35,4 +35,8 @@ httpx==0.28.1
 # ---- Testing ----
 pytest==9.1.1
 pytest-asyncio==1.4.0
-anyio==4.7.0
+# Pinned to what a clean resolve actually produces alongside mcp 2.x.
+# 4.7.0 was pinned here for months and was uninstallable from scratch: the
+# local venv only worked because installing mcp had upgraded anyio in place,
+# so the file described an environment that could not be recreated.
+anyio==4.14.2

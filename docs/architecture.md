@@ -396,6 +396,25 @@ Milestone 4 covered confirmation, limits and visibility. Revocation was missing
 withdraw is a limit you have already committed to. Milestone 7 adds it as a
 first-class, demonstrable control.
 
+### How the two additions fit together
+
+They are not independent features. Interoperability without consent would be
+worse than neither: a merchant any agent can call, with no way for the buyer to
+say who may act for them or to take it back. Consent without interoperability
+would be a control that only governs the agent we happened to write.
+
+Together they say something specific: **enforcement belongs to the merchant, not
+to the client.** An external MCP agent and our own LangGraph agent hit the same
+`services/orders.create_order()`, the same guardrails, the same grant check, the
+same audit trail. Swapping the protocol changes nothing about what is allowed;
+neither does swapping the model — `AGENT_MODE=scripted` replaces Claude with a
+keyword table and every cap, gate and audit row behaves identically.
+
+That is the property worth having when the protocol landscape is still
+unsettled. Whichever of x402, ACP, TAP, AP2 or UAP wins, a merchant whose
+enforcement lives below the protocol surface adapts by adding an adapter, not by
+re-implementing its safety model.
+
 ### What a v2 would add, and why not now
 
 Deliberately **not** built, with three days to submission:

@@ -10,6 +10,56 @@ test suite were both true while the chat UI rendered nothing at all.
 
 ---
 
+## M9 · `requirements.txt` could not be installed from a clean clone
+
+**Broke:** Cloning the repo and following the README failed immediately:
+
+```
+ERROR: Cannot install -r requirements.txt (line 26), (line 5) and anyio==4.7.0
+because these package versions have conflicting dependencies.
+ResolutionImpossible
+```
+
+**Cause:** `anyio==4.7.0` had been pinned since Milestone 0. Adding `mcp` in
+Milestone 6 silently **upgraded anyio in place** to 4.14.2 — pip resolved the
+new package's needs and moved on without complaining. The local environment
+worked; the file described one that could not be recreated.
+
+**Why it survived so long:** every check ran against the already-working venv.
+Nothing ever installed from scratch, so the divergence between the lockfile and
+reality was invisible for four milestones.
+
+**Fix:** repinned to `anyio==4.14.2`, then verified by cloning the pushed repo
+into a fresh directory and following the README verbatim — install, migrate,
+seed, 241 tests.
+
+**Lesson:** "it works on my machine" has a specific failure mode for Python
+projects. Adding a dependency mutates the environment underneath the pins, and
+only a clean install detects it. This is the single most valuable check before
+handing a repo to anyone else, and it should have run at every milestone rather
+than at the end.
+
+---
+
+## M9 · Next.js shipped with a known vulnerability
+
+**Broke:** `npm ci` in the clean clone printed:
+
+> `next@14.2.20: This version has a security vulnerability.`
+
+**Cause:** the version was pinned in Milestone 0 and never revisited.
+
+**Fix:** bumped to `14.2.35`, the latest patch inside 14.x — no major-version
+risk three days before submission. That clears the critical advisory. Two high
+advisories remain in a **PostCSS transitive dependency inside Next itself**, and
+`npm audit fix --force` resolves them only by installing Next 16, a breaking
+change. Both concern `sourceMappingURL` handling in CSS at build time, not a
+runtime request path. Taking a major framework upgrade days before a deadline is
+a worse risk than the one it removes, so this is a documented decision rather
+than an oversight.
+
+---
+
 ## M8 · The reset script granted access to the wrong database
 
 **Broke:** `demo/reset.py --granted` reported success, but the server saw no
