@@ -1,5 +1,4 @@
 import { BoundChecks } from "@/components/BoundChecks";
-import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/lib/cn";
 import type { GuardrailDecision } from "@/lib/types";
 
@@ -14,25 +13,35 @@ export function GuardrailNotice({
   return (
     <div
       className={cn(
-        "rounded-lg border px-3 py-2 text-xs",
-        blocked ? "border-danger/40 bg-danger/5" : "border-border bg-surface",
+        "rounded-xl border px-4 py-3.5",
+        blocked ? "border-danger/25 bg-danger/[0.04]" : "border-border bg-elevated",
       )}
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="font-medium">Spend guardrail</span>
-        <Badge tone={blocked ? "danger" : "ok"}>
+      <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+        <span className="text-eyebrow uppercase text-faint">Spend guardrail</span>
+        <span
+          className={cn(
+            "text-[0.6875rem] font-medium",
+            blocked ? "text-danger" : "text-ok",
+          )}
+        >
           {blocked ? "blocked" : "within limits"}
-        </Badge>
-        <span className="ml-auto font-semibold tabular-nums">
+        </span>
+        <span className="tabular ml-auto text-[0.9375rem] font-semibold tracking-[-0.02em]">
           {decision.amount.display}
         </span>
       </div>
 
-      <p className={cn("mt-1.5", blocked ? "text-danger" : "text-muted")}>
+      <p
+        className={cn(
+          "mt-2 max-w-prose text-[0.8125rem] leading-relaxed",
+          blocked ? "text-danger" : "text-muted",
+        )}
+      >
         {decision.reason}
       </p>
 
-      <BoundChecks checks={decision.checks} className="mt-2" />
+      <BoundChecks checks={decision.checks} className="mt-3" />
     </div>
   );
 }

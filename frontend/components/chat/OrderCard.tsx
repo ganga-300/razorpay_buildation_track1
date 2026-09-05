@@ -73,39 +73,41 @@ export function OrderCard({
   }
 
   return (
-    <Card className="p-3">
-      <div className="flex items-start justify-between gap-3">
+    <Card className="p-4">
+      <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <h3 className="truncate text-sm font-medium">
+          <h3 className="truncate text-[0.875rem] font-semibold tracking-[-0.015em]">
             {order.quantity} × {order.product.name}
           </h3>
-          <code className="mt-0.5 block font-mono text-[11px] text-muted">
+          <code className="mt-1 block font-mono text-[0.6875rem] text-faint">
             {order.order_id}
           </code>
         </div>
-        <div className="text-right">
-          <div className="whitespace-nowrap text-sm font-semibold tabular-nums">
+        <div className="shrink-0 text-right">
+          {/* The amount is the largest thing here. It is what the buyer is
+              being asked to agree to. */}
+          <div className="tabular whitespace-nowrap text-xl font-semibold tracking-[-0.03em]">
             {order.total.display}
           </div>
-          <Badge tone={presentation.tone} className="mt-1">
+          <Badge tone={presentation.tone} className="mt-1.5">
             {presentation.label}
           </Badge>
         </div>
       </div>
 
       {order.failure?.code ? (
-        <p className="mt-2 rounded-md border border-danger/40 bg-danger/5 px-2 py-1.5 text-xs text-danger">
+        <p className="mt-3 rounded-lg bg-danger/[0.06] px-3 py-2 text-[0.75rem] leading-relaxed text-danger">
           <span className="font-mono font-medium">{order.failure.code}</span>
           {order.failure.reason ? ` — ${order.failure.reason}` : null}
         </p>
       ) : null}
 
       {error ? (
-        <p className="mt-2 text-xs text-danger">{error}</p>
+        <p className="mt-3 text-[0.75rem] text-danger">{error}</p>
       ) : null}
 
       {canPay ? (
-        <div className="mt-3 flex items-center gap-2">
+        <div className="mt-4 flex flex-wrap items-center gap-3">
           <Button
             size="sm"
             onClick={handlePay}
@@ -123,7 +125,7 @@ export function OrderCard({
               `Pay ${order.total.display}`
             )}
           </Button>
-          <span className="text-[11px] text-muted">Razorpay test mode</span>
+          <span className="text-[0.6875rem] text-faint">Razorpay test mode</span>
         </div>
       ) : null}
     </Card>

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, approveOrder, declineOrder } from "@/lib/api";
+import { cn } from "@/lib/cn";
 import type { BoundCheck, Money, Order } from "@/lib/types";
 
 type State = "idle" | "approving" | "declining" | "approved" | "declined" | "error";
@@ -63,39 +64,50 @@ export function ApprovalPrompt({
   }
 
   return (
-    <Card className="border-warn/50 bg-warn/5 p-3">
-      <div className="flex items-start justify-between gap-3">
+    <Card className="border-warn/30 bg-warn/[0.04] p-5">
+      <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <h3 className="text-sm font-medium text-warn">
-            Your approval is needed
-          </h3>
-          <p className="mt-0.5 text-xs text-muted">
-            {productName} · <span className="font-medium">{total.display}</span>
-          </p>
+          <p className="text-eyebrow uppercase text-warn">Waiting on you</p>
+          <h3 className="mt-2 text-title">Approve this purchase?</h3>
+          <p className="mt-1.5 text-[0.8125rem] text-muted">{productName}</p>
         </div>
-        <span className="whitespace-nowrap text-sm font-semibold tabular-nums">
+        <span className="tabular shrink-0 whitespace-nowrap text-2xl font-semibold tracking-[-0.03em]">
           {total.display}
         </span>
       </div>
 
       {reason ? (
-        <p className="mt-2 text-xs leading-relaxed text-muted">{reason}</p>
+        <p className="mt-4 max-w-prose text-[0.8125rem] leading-relaxed text-muted">
+          {reason}
+        </p>
       ) : null}
 
       {checks && checks.length > 0 ? (
-        <BoundChecks checks={checks} className="mt-2" />
+        <BoundChecks checks={checks} className="mt-3" />
       ) : null}
 
-      {error ? <p className="mt-2 text-xs text-danger">{error}</p> : null}
+      {error ? <p className="mt-3 text-[0.75rem] text-danger">{error}</p> : null}
 
       {settled ? (
-        <p className="mt-3 text-xs font-medium">
+        <p
+          className={cn(
+            "mt-5 flex items-center gap-2 text-[0.8125rem] font-medium",
+            state === "approved" ? "text-ok" : "text-muted",
+          )}
+        >
+          <span
+            aria-hidden
+            className={cn(
+              "h-1.5 w-1.5 rounded-full",
+              state === "approved" ? "bg-ok" : "bg-faint",
+            )}
+          />
           {state === "approved"
             ? "Approved — the order was placed."
             : "Declined — nothing was charged."}
         </p>
       ) : (
-        <div className="mt-3 flex items-center gap-2">
+        <div className="mt-5 flex flex-wrap items-center gap-2.5">
           <Button size="sm" disabled={busy} onClick={() => act("approve")}>
             {state === "approving" ? <Spinner /> : null}
             Approve {total.display}

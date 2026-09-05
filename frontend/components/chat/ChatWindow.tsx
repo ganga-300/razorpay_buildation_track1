@@ -4,7 +4,6 @@ import { useEffect, useRef } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card, CardHeader } from "@/components/ui/Card";
 import { ApprovalPrompt } from "./ApprovalPrompt";
 import { Composer } from "./Composer";
 import { GuardrailNotice } from "./GuardrailNotice";
@@ -38,42 +37,66 @@ export function ChatWindow() {
   }, [items]);
 
   return (
-    <Card className="flex h-full min-h-0 flex-col overflow-hidden">
-      <CardHeader
-        title="Purchasing agent"
-        subtitle="Razorpay test mode · every money action is bounded and audited"
-        action={
-          <div className="flex items-center gap-2">
-            {/* A scripted turn must never be mistaken for the model. */}
-            {agentMode === "scripted" ? (
-              <Badge tone="warn" title="Deterministic keyword planner — no model call">
-                scripted planner
-              </Badge>
-            ) : model ? (
-              <Badge tone="neutral">{model}</Badge>
-            ) : null}
-            {intent ? <Badge tone="brand">{intent}</Badge> : null}
-            {items.length > 0 ? (
-              <Button variant="ghost" size="sm" onClick={reset}>
-                New chat
-              </Button>
-            ) : null}
-          </div>
-        }
-      />
+    <div className="flex h-full min-h-0 flex-col">
+      <header className="flex flex-wrap items-center gap-3 pb-5">
+        <div className="flex items-center gap-2">
+          {/* A scripted turn must never be mistaken for the model. */}
+          {agentMode === "scripted" ? (
+            <Badge tone="warn" title="Deterministic keyword planner — no model call">
+              scripted planner
+            </Badge>
+          ) : model ? (
+            <Badge tone="neutral">{model}</Badge>
+          ) : null}
+          {intent ? <Badge tone="brand">{intent}</Badge> : null}
+        </div>
 
-      <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-4">
+        {items.length > 0 ? (
+          <Button variant="ghost" size="sm" onClick={reset} className="ml-auto">
+            New chat
+          </Button>
+        ) : null}
+      </header>
+
+      <div
+        ref={scrollRef}
+        className="min-h-0 flex-1 space-y-5 overflow-y-auto pb-6 [contain:paint]"
+      >
         {items.length === 0 ? (
           <EmptyState onPick={send} />
         ) : (
           items.map((item) => (
-            <ChatItemView key={item.id} item={item} onSettled={replaceOrder} />
+            // Keyed by a stable id, so each entry mounts — and therefore
+            // animates — exactly once.
+            <div key={item.id} className="animate-rise">
+              <ChatItemView item={item} onSettled={replaceOrder} />
+            </div>
           ))
         )}
+
+        {isStreaming ? <ThinkingLine /> : null}
       </div>
 
-      <Composer onSend={send} disabled={isStreaming} />
-    </Card>
+      <div className="pt-1">
+        <Composer onSend={send} disabled={isStreaming} />
+      </div>
+    </div>
+  );
+}
+
+/** A quiet pulse while the agent works, so the wait has a heartbeat. */
+function ThinkingLine() {
+  return (
+    <div className="flex items-center gap-2 text-[0.8125rem] text-faint">
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          className="h-1.5 w-1.5 animate-pulse rounded-full bg-faint"
+          style={{ animationDelay: `${i * 160}ms` }}
+        />
+      ))}
+      <span className="ml-1">thinking</span>
+    </div>
   );
 }
 
@@ -109,9 +132,7 @@ function ChatItemView({
       return <OrderCard order={item.order} onSettled={onSettled} />;
 
     case "guardrail":
-      return (
-        <GuardrailNotice decision={item.decision} blocked={item.blocked} />
-      );
+      return <GuardrailNotice decision={item.decision} blocked={item.blocked} />;
 
     case "approval":
       return (
@@ -127,9 +148,8 @@ function ChatItemView({
 
     case "error":
       return (
-        <div className="rounded-lg border border-danger/40 bg-danger/5 px-3 py-2 text-xs text-danger">
-          <span className="font-mono font-medium">{item.error.code}</span>
-          {" — "}
+        <div className="rounded-xl bg-danger/[0.06] px-4 py-3 text-[0.8125rem] leading-relaxed text-danger">
+          <span className="font-mono font-medium">{item.error.code}</span> —{" "}
           {item.error.message}
         </div>
       );
@@ -138,19 +158,27 @@ function ChatItemView({
 
 function EmptyState({ onPick }: { onPick: (text: string) => void }) {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
-      <div>
-        <p className="text-sm font-medium">Tell the agent what you need.</p>
-        <p className="mt-1 text-xs text-muted">
-          It searches the catalog, proposes an order, and asks before spending
-          above the approval threshold.
-        </p>
-      </div>
-      <div className="flex flex-wrap justify-center gap-2">
-        {SUGGESTIONS.map((s) => (
-          <Button key={s} variant="secondary" size="sm" onClick={() => onPick(s)}>
+    <div className="flex h-full flex-col justify-center py-10">
+      <h2 className="max-w-[18ch] text-display text-balance">
+        What do you need?
+      </h2>
+      <p className="mt-4 max-w-prose text-[0.9375rem] leading-relaxed text-muted">
+        The agent searches the catalog, proposes an order, and stops to ask when
+        the amount crosses the approval threshold. Every tool it calls is shown
+        inline.
+      </p>
+
+      <div className="mt-8 flex flex-col items-start gap-2">
+        {SUGGESTIONS.map((s, i) => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => onPick(s)}
+            style={{ animationDelay: `${i * 70}ms` }}
+            className="animate-rise rounded-full border border-border bg-elevated px-4 py-2 text-left text-[0.8125rem] text-muted transition-all duration-fast ease hover:-translate-y-0.5 hover:border-ink/25 hover:text-ink hover:shadow-card"
+          >
             {s}
-          </Button>
+          </button>
         ))}
       </div>
     </div>

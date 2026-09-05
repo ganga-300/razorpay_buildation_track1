@@ -9,10 +9,11 @@ const LABELS: Record<string, string> = {
 };
 
 /**
- * The bounds that were evaluated, with the values seen at the time.
+ * The bounds that were evaluated, with the value seen against each limit.
  *
- * This is what turns "blocked" into an explanation. Shown in the chat when a
- * decision affects the buyer, and in the audit trail as the permanent record.
+ * This is what turns "blocked" into an explanation. A failing row is tinted and
+ * weighted so it reads first — when four bounds are listed and one stopped the
+ * purchase, that one is the entire answer.
  */
 export function BoundChecks({
   checks,
@@ -24,26 +25,35 @@ export function BoundChecks({
   if (checks.length === 0) return null;
 
   return (
-    <ul className={cn("space-y-1 text-[11px]", className)}>
-      {checks.map((c) => (
-        <li key={c.name} className="flex items-baseline gap-2">
+    <ul className={cn("space-y-px text-[0.75rem]", className)}>
+      {checks.map((check) => (
+        <li
+          key={check.name}
+          className={cn(
+            "flex items-center gap-2.5 rounded-lg px-2 py-1.5",
+            "transition-colors duration-slow ease",
+            !check.passed && "bg-danger/[0.06]",
+          )}
+        >
           <span
             aria-hidden
             className={cn(
-              "mt-1 inline-block h-1.5 w-1.5 shrink-0 rounded-full",
-              c.passed ? "bg-ok" : "bg-danger",
+              "h-1.5 w-1.5 shrink-0 rounded-full",
+              check.passed ? "bg-ok" : "bg-danger",
             )}
           />
-          <span className="text-muted">{LABELS[c.name] ?? c.name}</span>
+          <span className={check.passed ? "text-muted" : "text-ink"}>
+            {LABELS[check.name] ?? check.name}
+          </span>
           <span
             className={cn(
-              "ml-auto whitespace-nowrap tabular-nums",
-              c.passed ? "text-muted" : "font-medium text-danger",
+              "tabular ml-auto whitespace-nowrap",
+              check.passed ? "text-faint" : "font-medium text-danger",
             )}
           >
-            {c.observed_display} / {c.limit_display}
+            {check.observed_display} / {check.limit_display}
           </span>
-          <span className="sr-only">{c.passed ? "passed" : "failed"}</span>
+          <span className="sr-only">{check.passed ? "passed" : "failed"}</span>
         </li>
       ))}
     </ul>
