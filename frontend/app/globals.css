@@ -3,38 +3,162 @@
 @tailwind utilities;
 
 @layer base {
+  /*
+   * An editorial palette, not a product-dashboard one.
+   *
+   * The ground is a warm off-white rather than pure #fff, and the ink is a warm
+   * near-black rather than #000 — the tiny amount of yellow in both is what
+   * stops a monochrome interface reading as cold and machine-made.
+   *
+   * `brand` is deliberately near-black. In a screen full of money, colour
+   * should mean something: green and red are reserved for outcomes, so a
+   * primary button earns attention through contrast and shape instead.
+   */
   :root {
-    --surface: 250 250 250;
-    --elevated: 255 255 255;
-    --border: 226 226 230;
-    --ink: 20 20 24;
-    --muted: 110 110 122;
-    --brand: 59 91 219;
-    --ok: 22 133 84;
-    --warn: 176 116 12;
-    --danger: 199 48 48;
-    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --surface: 250 249 247;   /* page ground */
+    --elevated: 255 255 255;  /* cards */
+    --sunken: 244 243 240;    /* wells, insets, meter tracks */
+    --border: 228 226 221;    /* hairlines */
+
+    --ink: 14 14 13;          /* primary text */
+    --muted: 116 114 108;     /* secondary text */
+    --faint: 162 159 152;     /* tertiary, timestamps, ids */
+
+    --brand: 17 17 16;        /* near-black: CTAs, active states */
+    --on-brand: 250 249 247;  /* text on brand */
+
+    --ok: 27 106 74;
+    --warn: 148 98 16;
+    --danger: 178 44 40;
+
+    /* Motion. One easing curve for almost everything: a long, decelerating
+       exit reads as physical rather than mechanical. */
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
+    --dur-fast: 160ms;
+    --dur: 320ms;
+    --dur-slow: 620ms;
+
+    --shadow-card: 0 1px 2px rgb(14 14 13 / 0.04), 0 8px 24px -12px rgb(14 14 13 / 0.10);
+    --shadow-lift: 0 2px 4px rgb(14 14 13 / 0.05), 0 24px 56px -24px rgb(14 14 13 / 0.22);
   }
 
   @media (prefers-color-scheme: dark) {
     :root {
-      --surface: 14 14 17;
-      --elevated: 24 24 29;
-      --border: 44 44 52;
-      --ink: 240 240 245;
-      --muted: 150 150 162;
-      --brand: 129 152 246;
-      --ok: 74 194 133;
-      --warn: 226 172 65;
-      --danger: 239 106 106;
+      --surface: 11 11 10;
+      --elevated: 21 21 20;
+      --sunken: 16 16 15;
+      --border: 42 42 39;
+
+      --ink: 244 243 239;
+      --muted: 150 147 140;
+      --faint: 108 106 100;
+
+      --brand: 244 243 239;
+      --on-brand: 14 14 13;
+
+      --ok: 92 192 142;
+      --warn: 216 168 78;
+      --danger: 232 108 102;
+
+      --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px -12px rgb(0 0 0 / 0.6);
+      --shadow-lift: 0 2px 4px rgb(0 0 0 / 0.5), 0 24px 56px -24px rgb(0 0 0 / 0.8);
     }
   }
 
   html {
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
 
   body {
     @apply bg-surface text-ink font-sans;
+    font-feature-settings: "cv05" 1, "ss01" 1;
+  }
+
+  /* Numbers that change in place — totals, meters, spend — must not reflow the
+     layout as their digits change. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::selection {
+    background: rgb(var(--ink));
+    color: rgb(var(--surface));
+  }
+
+  :focus-visible {
+    outline: 2px solid rgb(var(--ink));
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+}
+
+@layer components {
+  /*
+   * Scroll-reveal. Elements start displaced and settle when scrolled into view.
+   * The initial state is applied only once JS has marked the document ready, so
+   * content is never invisible if scripts fail — a page that hides its own text
+   * waiting for an observer is worse than one that never animates.
+   */
+  [data-reveal] {
+    opacity: 1;
+  }
+
+  html[data-motion="on"] [data-reveal] {
+    opacity: 0;
+    transform: translateY(14px);
+    transition:
+      opacity var(--dur-slow) var(--ease),
+      transform var(--dur-slow) var(--ease);
+  }
+
+  html[data-motion="on"] [data-reveal][data-shown="true"] {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .text-pretty {
+    text-wrap: pretty;
+  }
+
+  /* A hairline that fades at both ends — softer than a full-width rule. */
+  .rule-fade {
+    background-image: linear-gradient(
+      to right,
+      transparent,
+      rgb(var(--border)) 12%,
+      rgb(var(--border)) 88%,
+      transparent
+    );
+  }
+}
+
+/*
+ * Anyone who has asked their system to reduce motion gets none of it. Not
+ * shortened — none. Vestibular triggers are not a matter of degree, and a
+ * "subtle" transform is still a transform.
+ */
+@media (prefers-reduced-motion: reduce) {
+  html[data-motion="on"] [data-reveal] {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

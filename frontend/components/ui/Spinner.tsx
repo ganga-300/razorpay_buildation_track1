@@ -6,8 +6,8 @@ export function Spinner({ className }: { className?: string }) {
       role="status"
       aria-label="Loading"
       className={cn(
-        "inline-block h-3 w-3 animate-spin rounded-full",
-        "border-2 border-current border-r-transparent align-[-1px]",
+        "inline-block h-3 w-3 shrink-0 animate-spin rounded-full",
+        "border-[1.5px] border-current border-r-transparent align-[-1px]",
         className,
       )}
     />

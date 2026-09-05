@@ -3,12 +3,17 @@ import type { ReactNode } from "react";
 
 export type BadgeTone = "neutral" | "brand" | "ok" | "warn" | "danger";
 
+/**
+ * A tinted wash rather than an outline. Against a warm paper ground a hairline
+ * badge disappears; a faint fill of its own hue reads at a glance without
+ * shouting, which matters when several sit in one table cell.
+ */
 const TONES: Record<BadgeTone, string> = {
-  neutral: "border-border text-muted",
-  brand: "border-brand/40 text-brand",
-  ok: "border-ok/40 text-ok",
-  warn: "border-warn/40 text-warn",
-  danger: "border-danger/40 text-danger",
+  neutral: "bg-sunken text-muted",
+  brand: "bg-ink/[0.06] text-ink",
+  ok: "bg-ok/10 text-ok",
+  warn: "bg-warn/10 text-warn",
+  danger: "bg-danger/10 text-danger",
 };
 
 export function Badge({
@@ -27,8 +32,8 @@ export function Badge({
     <span
       title={title}
       className={cn(
-        "inline-flex items-center whitespace-nowrap rounded-full border",
-        "px-2 py-0.5 text-xs font-medium",
+        "inline-flex items-center whitespace-nowrap rounded-full",
+        "px-2.5 py-1 text-[0.6875rem] font-medium leading-none tracking-[-0.005em]",
         TONES[tone],
         className,
       )}

@@ -31,7 +31,9 @@ export function Table<T>({
 }) {
   if (rows.length === 0) {
     return (
-      <div className="px-4 py-10 text-center text-sm text-muted">{empty}</div>
+      <div className="px-5 py-16 text-center text-[0.8125rem] text-muted">
+        {empty}
+      </div>
     );
   }
 
@@ -41,7 +43,7 @@ export function Table<T>({
     // overflow amount and the whole page picks up a stray horizontal scroll,
     // even though the table itself is clipped and scrolls correctly.
     <div className={cn("w-full overflow-x-auto [contain:paint]", className)}>
-      <table className="w-full border-collapse text-sm">
+      <table className="w-full border-collapse text-[0.8125rem]">
         <thead>
           <tr className="border-b border-border">
             {columns.map((col) => (
@@ -49,7 +51,7 @@ export function Table<T>({
                 key={col.key}
                 scope="col"
                 className={cn(
-                  "whitespace-nowrap px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-muted",
+                  "whitespace-nowrap px-5 py-3 text-eyebrow uppercase text-faint",
                   col.numeric ? "text-right" : "text-left",
                 )}
               >
@@ -62,14 +64,14 @@ export function Table<T>({
           {rows.map((row) => (
             <tr
               key={rowKey(row)}
-              className="border-b border-border last:border-0"
+              className="border-b border-border transition-colors duration-fast ease last:border-0 hover:bg-sunken/60"
             >
               {columns.map((col) => (
                 <td
                   key={col.key}
                   className={cn(
-                    "px-4 py-3 align-top",
-                    col.numeric && "text-right tabular-nums",
+                    "px-5 py-4 align-top",
+                    col.numeric && "tabular text-right",
                   )}
                 >
                   {col.render(row)}

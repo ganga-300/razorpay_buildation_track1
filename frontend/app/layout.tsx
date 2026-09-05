@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 
+import { MotionProvider } from "@/components/motion/MotionProvider";
 import { Nav } from "@/components/Nav";
+import { mono, sans } from "./fonts";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -13,8 +15,9 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${sans.variable} ${mono.variable}`}>
       <body className="min-h-screen antialiased">
+        <MotionProvider />
         <Nav />
         {children}
       </body>
