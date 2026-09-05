@@ -53,8 +53,8 @@ export function AuditTable({ entries }: { entries: AuditEntry[] }) {
       header: "When",
       render: (e) => (
         <div className="min-w-0">
-          <span className="whitespace-nowrap text-xs">{when(e.created_at)}</span>
-          <code className="mt-0.5 block font-mono text-[11px] text-muted">
+          <span className="whitespace-nowrap text-[0.75rem]">{when(e.created_at)}</span>
+          <code className="mt-1 block font-mono text-[0.6875rem] text-faint">
             {e.id}
           </code>
         </div>
@@ -65,8 +65,8 @@ export function AuditTable({ entries }: { entries: AuditEntry[] }) {
       header: "Action",
       render: (e) => (
         <div className="min-w-0 max-w-[14rem]">
-          <code className="font-mono text-xs">{e.action}</code>
-          <span className="mt-0.5 block truncate text-[11px] text-muted">
+          <code className="font-mono text-[0.75rem]">{e.action}</code>
+          <span className="mt-1 block truncate text-[0.6875rem] text-faint">
             {e.product?.name ?? "—"}
             {e.quantity ? ` × ${e.quantity}` : ""}
           </span>
@@ -77,7 +77,9 @@ export function AuditTable({ entries }: { entries: AuditEntry[] }) {
       key: "amount",
       header: "Amount",
       numeric: true,
-      render: (e) => <span className="font-medium">{e.amount.display}</span>,
+      render: (e) => (
+        <span className="font-semibold tracking-[-0.02em]">{e.amount.display}</span>
+      ),
     },
     {
       key: "verdict",
@@ -98,13 +100,13 @@ export function AuditTable({ entries }: { entries: AuditEntry[] }) {
               {OUTCOME[e.outcome].label}
             </Badge>
           </div>
-          <p className="text-[11px] text-muted">
+          <p className="tabular text-[0.6875rem] text-faint">
             {e.approved_by ? `by ${e.approved_by} · ` : ""}
             {e.attempts} {e.attempts === 1 ? "try" : "tries"}
             {e.duration_ms !== null ? ` · ${e.duration_ms}ms` : ""}
           </p>
           {e.failure?.code ? (
-            <code className="font-mono text-[11px] text-danger">
+            <code className="font-mono text-[0.6875rem] text-danger">
               {e.failure.code}
             </code>
           ) : null}
@@ -119,7 +121,7 @@ export function AuditTable({ entries }: { entries: AuditEntry[] }) {
           <button
             type="button"
             onClick={() => setExpanded(expanded === e.id ? null : e.id)}
-            className="text-left text-xs text-muted underline-offset-2 hover:text-ink hover:underline"
+            className="text-left text-[0.75rem] leading-relaxed text-muted underline-offset-4 transition-colors duration-fast hover:text-ink hover:underline"
             aria-expanded={expanded === e.id}
           >
             <span className={expanded === e.id ? "" : "line-clamp-2"}>
@@ -127,16 +129,18 @@ export function AuditTable({ entries }: { entries: AuditEntry[] }) {
             </span>
           </button>
           {expanded === e.id ? (
-            <div className="mt-2 rounded-md border border-border bg-surface p-2">
-              <p className="mb-1.5 text-[11px] font-medium text-muted">
+            <div className="mt-3 animate-scale-in rounded-xl border border-border bg-sunken/60 p-3">
+              <p className="mb-2 text-eyebrow uppercase text-faint">
                 Bounds checked at decision time
               </p>
               <BoundChecks checks={e.checks} />
               {e.failure?.reason ? (
-                <p className="mt-2 text-[11px] text-danger">{e.failure.reason}</p>
+                <p className="mt-2 text-[0.6875rem] leading-relaxed text-danger">
+                  {e.failure.reason}
+                </p>
               ) : null}
               {e.order_id ? (
-                <code className="mt-2 block font-mono text-[11px] text-muted">
+                <code className="mt-2 block font-mono text-[0.6875rem] text-faint">
                   {e.order_id}
                 </code>
               ) : null}

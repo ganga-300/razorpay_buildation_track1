@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
+import { Reveal } from "@/components/motion/Reveal";
 import { getAudit, getGrants, getOrders } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import type { AuditListResponse, Grant, OrderListResponse } from "@/lib/types";
@@ -57,15 +58,15 @@ export default function DashboardPage() {
   }, [load]);
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-6">
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
+    <main className="mx-auto max-w-6xl px-5 pb-24 pt-10 sm:px-8 sm:pt-14">
+      <div className="mb-10 flex flex-wrap items-end justify-between gap-6">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">
-            Merchant dashboard
+          <p className="text-eyebrow uppercase text-faint">Merchant</p>
+          <h1 className="mt-4 max-w-[20ch] text-display text-balance">
+            Every money action the agent took.
           </h1>
-          <p className="mt-1 text-sm text-muted">
-            Every money action the agent took — and every one it was stopped
-            from taking.
+          <p className="mt-4 max-w-prose text-lede text-muted">
+            And every one it was stopped from taking.
           </p>
         </div>
         <Button variant="secondary" size="sm" onClick={load} disabled={loading}>
@@ -75,28 +76,36 @@ export default function DashboardPage() {
       </div>
 
       {error ? (
-        <Card className="mb-4 border-danger/40 bg-danger/5 p-4 text-sm text-danger">
+        <div className="mb-6 rounded-xl bg-danger/[0.06] px-4 py-3 text-[0.8125rem] text-danger">
           {error}
-        </Card>
+        </div>
       ) : null}
 
       {/* Authority first: whether the agent may act at all comes before how
           much it may spend. */}
-      <div className="mb-4">
-        <AgentAccess grant={grant} onChanged={load} />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Reveal>
+          <AgentAccess grant={grant} onChanged={load} />
+        </Reveal>
+        {audit ? (
+          <Reveal delay={80}>
+            <SpendMeter budget={audit.budget} />
+          </Reveal>
+        ) : null}
       </div>
 
-      {audit ? (
-        <div className="mb-4">
-          <SpendMeter budget={audit.budget} />
-        </div>
+      {orders ? (
+        <Reveal delay={140} className="mt-4 block">
+          <SummaryStats summary={orders.summary} />
+        </Reveal>
       ) : null}
 
-      {orders ? <SummaryStats summary={orders.summary} /> : null}
-
-      <div className="mt-4">
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <nav className="flex gap-1" aria-label="Dashboard views">
+      <div className="mt-10">
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <nav
+            className="flex gap-1 rounded-full border border-border bg-elevated p-1"
+            aria-label="Dashboard views"
+          >
             {(["orders", "audit"] as const).map((t) => (
               <button
                 key={t}
@@ -104,9 +113,9 @@ export default function DashboardPage() {
                 onClick={() => setTab(t)}
                 aria-current={tab === t ? "page" : undefined}
                 className={cn(
-                  "rounded-md px-3 py-1.5 text-sm transition-colors",
+                  "rounded-full px-4 py-1.5 text-[0.8125rem] transition-all duration-fast ease",
                   tab === t
-                    ? "bg-elevated text-ink"
+                    ? "bg-brand text-on-brand"
                     : "text-muted hover:text-ink",
                 )}
               >
@@ -124,7 +133,7 @@ export default function DashboardPage() {
                 id="decision-filter"
                 value={decision}
                 onChange={(e) => setDecision(e.target.value)}
-                className="ml-auto rounded-md border border-border bg-elevated px-2 py-1.5 text-xs"
+                className="ml-auto h-8 rounded-full border border-border bg-elevated px-3.5 text-[0.75rem] transition-colors duration-fast hover:border-ink/25"
               >
                 {DECISION_FILTERS.map((f) => (
                   <option key={f.value} value={f.value}>
@@ -183,7 +192,7 @@ export default function DashboardPage() {
 
 function Loading() {
   return (
-    <div className="px-4 py-10 text-center text-sm text-muted">
+    <div className="px-5 py-16 text-center text-[0.8125rem] text-muted">
       <Spinner /> Loading…
     </div>
   );
@@ -196,7 +205,7 @@ function Loading() {
  */
 function Unavailable() {
   return (
-    <div className="px-4 py-10 text-center text-sm text-muted">
+    <div className="px-5 py-16 text-center text-[0.8125rem] text-muted">
       Could not load this data. Check the backend, then hit Refresh.
     </div>
   );

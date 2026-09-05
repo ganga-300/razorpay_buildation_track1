@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Card, CardHeader } from "@/components/ui/Card";
+import { Card } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError, grantAccess, revokeGrant } from "@/lib/api";
 import { cn } from "@/lib/cn";
@@ -81,21 +81,26 @@ export function AgentAccess({
 
   if (!grant) {
     return (
-      <Card className="border-warn/50 bg-warn/5">
-        <CardHeader
-          title="Agent access"
-          subtitle="The agent has no purchasing authority and cannot buy anything."
-          action={<Badge tone="warn">not granted</Badge>}
-        />
-        <div className="px-4 py-3">
-          <p className="text-xs text-muted">
-            Grant a capped, expiring allowance. The agent can then buy freely
-            within it without asking again — and you can withdraw it at any time.
-          </p>
+      <Card className="border-warn/30 bg-warn/[0.04] p-5 sm:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-eyebrow uppercase text-warn">Agent access</p>
+            <h2 className="mt-3 text-title">No purchasing authority</h2>
+            <p className="mt-2 max-w-prose text-[0.8125rem] leading-relaxed text-muted">
+              The agent cannot buy anything. Grant a capped, expiring allowance
+              and it can then buy freely within it without asking again — and you
+              can withdraw it at any time.
+            </p>
+          </div>
+          <Badge tone="warn">not granted</Badge>
+        </div>
 
-          <div className="mt-3 flex flex-wrap items-end gap-3">
+        <div>
+          <div className="mt-6 flex flex-wrap items-end gap-4">
             <div>
-              <span className="mb-1 block text-xs text-muted">Spending cap</span>
+              <span className="mb-2 block text-eyebrow uppercase text-faint">
+                Spending cap
+              </span>
               <div className="flex gap-1">
                 {PRESETS.map((p) => (
                   <button
@@ -103,10 +108,11 @@ export function AgentAccess({
                     type="button"
                     onClick={() => setCap(p.minor)}
                     className={cn(
-                      "rounded-md border px-2.5 py-1 text-xs transition-colors",
+                      "tabular rounded-full border px-3.5 py-1.5 text-[0.75rem]",
+                      "transition-all duration-fast ease active:scale-95",
                       cap === p.minor
-                        ? "border-brand text-brand"
-                        : "border-border text-muted hover:text-ink",
+                        ? "border-transparent bg-brand text-on-brand"
+                        : "border-border bg-elevated text-muted hover:border-ink/25 hover:text-ink",
                     )}
                   >
                     {p.label}
@@ -116,14 +122,17 @@ export function AgentAccess({
             </div>
 
             <div>
-              <label htmlFor="grant-hours" className="mb-1 block text-xs text-muted">
+              <label
+                htmlFor="grant-hours"
+                className="mb-2 block text-eyebrow uppercase text-faint"
+              >
                 Expires in
               </label>
               <select
                 id="grant-hours"
                 value={hours}
                 onChange={(e) => setHours(Number(e.target.value))}
-                className="rounded-md border border-border bg-elevated px-2 py-1.5 text-xs"
+                className="h-8 rounded-full border border-border bg-elevated px-3.5 text-[0.75rem] transition-colors duration-fast hover:border-ink/25"
               >
                 <option value={1}>1 hour</option>
                 <option value={24}>24 hours</option>
@@ -137,7 +146,9 @@ export function AgentAccess({
             </Button>
           </div>
 
-          {error ? <p className="mt-2 text-xs text-danger">{error}</p> : null}
+          {error ? (
+            <p className="mt-3 text-[0.75rem] text-danger">{error}</p>
+          ) : null}
         </div>
       </Card>
     );
@@ -148,40 +159,38 @@ export function AgentAccess({
   const pct = Math.round(grant.used_fraction * 100);
 
   return (
-    <Card>
-      <CardHeader
-        title="Agent access"
-        subtitle={`Granted ${grant.spend_cap.display} · ${expiryLabel(grant.expires_at)}`}
-        action={
-          <div className="flex items-center gap-2">
-            <Badge tone="ok">active</Badge>
-            <Button size="sm" variant="danger" onClick={handleRevoke} disabled={busy}>
-              {busy ? <Spinner /> : null}
-              Revoke access
-            </Button>
-          </div>
-        }
-      />
+    <Card className="p-5 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="flex items-center gap-2 text-eyebrow uppercase text-faint">
+            <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-ok" />
+            Agent access · active
+          </p>
+          <p className="tabular mt-3 text-[1.75rem] font-semibold leading-none tracking-[-0.04em]">
+            {grant.remaining.display}
+          </p>
+          <p className="mt-2 text-[0.8125rem] text-muted">
+            still authorised of {grant.spend_cap.display} ·{" "}
+            {expiryLabel(grant.expires_at)}
+          </p>
+        </div>
 
-      <div className="px-4 py-3">
-        <div className="flex flex-wrap items-baseline justify-between gap-2 text-xs">
-          <span className="text-muted">
-            Spent{" "}
-            <span className="font-semibold tabular-nums text-ink">
-              {grant.spent.display}
-            </span>{" "}
-            of {grant.spend_cap.display}
+        <Button size="sm" variant="danger" onClick={handleRevoke} disabled={busy}>
+          {busy ? <Spinner /> : null}
+          Revoke access
+        </Button>
+      </div>
+
+      <div className="mt-5">
+        <div className="flex flex-wrap items-baseline justify-between gap-2 text-[0.75rem] text-faint">
+          <span>
+            Spent <span className="tabular text-ink">{grant.spent.display}</span>
           </span>
-          <span className="text-muted">
-            <span className="font-semibold tabular-nums text-ink">
-              {grant.remaining.display}
-            </span>{" "}
-            still authorised
-          </span>
+          <span className="tabular">{pct}% used</span>
         </div>
 
         <div
-          className="mt-2 h-2 w-full overflow-hidden rounded-full bg-surface"
+          className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-sunken"
           role="meter"
           aria-valuenow={pct}
           aria-valuemin={0}
@@ -190,19 +199,23 @@ export function AgentAccess({
         >
           <div
             className={cn(
-              "h-full rounded-full transition-all",
+              "h-full rounded-full transition-[width] duration-slow ease",
               pct >= 90 ? "bg-danger" : pct >= 70 ? "bg-warn" : "bg-ok",
             )}
-            style={{ width: `${Math.max(pct, grant.spent.amount_minor > 0 ? 2 : 0)}%` }}
+            style={{
+              width: `${Math.max(pct, grant.spent.amount_minor > 0 ? 1.5 : 0)}%`,
+            }}
           />
         </div>
 
-        <p className="mt-2 text-[11px] text-muted">
+        <p className="mt-4 border-t border-border pt-4 text-[0.75rem] leading-relaxed text-faint">
           Revoking takes effect on the very next order — including one already
           waiting for your approval.
         </p>
 
-        {error ? <p className="mt-2 text-xs text-danger">{error}</p> : null}
+        {error ? (
+          <p className="mt-3 text-[0.75rem] text-danger">{error}</p>
+        ) : null}
       </div>
     </Card>
   );

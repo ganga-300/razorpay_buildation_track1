@@ -22,13 +22,15 @@ const COLUMNS: Column<Order>[] = [
     header: "Order",
     render: (o) => (
       <div className="min-w-0">
-        <code className="block font-mono text-xs">{o.order_id}</code>
+        <code className="block font-mono text-[0.75rem]">{o.order_id}</code>
         {o.razorpay_order_id ? (
-          <code className="mt-0.5 block font-mono text-[11px] text-muted">
+          <code className="mt-1 block font-mono text-[0.6875rem] text-faint">
             {o.razorpay_order_id}
           </code>
         ) : (
-          <span className="text-[11px] text-muted">never reached Razorpay</span>
+          <span className="mt-1 block text-[0.6875rem] text-faint">
+            never reached Razorpay
+          </span>
         )}
       </div>
     ),
@@ -38,8 +40,8 @@ const COLUMNS: Column<Order>[] = [
     header: "Product",
     render: (o) => (
       <div className="min-w-0">
-        <span className="block truncate">{o.product.name}</span>
-        <span className="text-xs text-muted">
+        <span className="block truncate font-medium">{o.product.name}</span>
+        <span className="tabular mt-1 block text-[0.6875rem] text-faint">
           {o.quantity} × {o.unit_price.display}
         </span>
       </div>
@@ -49,7 +51,9 @@ const COLUMNS: Column<Order>[] = [
     key: "total",
     header: "Total",
     numeric: true,
-    render: (o) => <span className="font-medium">{o.total.display}</span>,
+    render: (o) => (
+      <span className="font-semibold tracking-[-0.02em]">{o.total.display}</span>
+    ),
   },
   {
     key: "status",
@@ -60,7 +64,7 @@ const COLUMNS: Column<Order>[] = [
         <div>
           <Badge tone={s.tone}>{s.label}</Badge>
           {o.failure?.code ? (
-            <p className="mt-1 max-w-[22rem] text-[11px] text-danger">
+            <p className="mt-2 max-w-[22rem] text-[0.6875rem] leading-relaxed text-danger">
               <span className="font-mono">{o.failure.code}</span>
               {o.failure.reason ? ` — ${o.failure.reason}` : null}
             </p>
@@ -79,7 +83,7 @@ const COLUMNS: Column<Order>[] = [
     key: "created",
     header: "Created",
     render: (o) => (
-      <span className="whitespace-nowrap text-xs text-muted">
+      <span className="whitespace-nowrap text-[0.6875rem] text-faint">
         {formatWhen(o.created_at)}
       </span>
     ),
