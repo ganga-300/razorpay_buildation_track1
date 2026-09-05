@@ -131,8 +131,8 @@ Succeeds. Show `Agent authority ₹349.00 / ₹5,000.00` in green, and the
 dashboard's **Spent ₹349.00 of ₹5,000.00**.
 
 **Beat 4 — revoke, and prove it bit** (~25s). This is the clip. On
-`/dashboard`, click the red **Revoke access**. The panel flips to
-*"The agent has no purchasing authority and cannot buy anything."*
+`/dashboard`, click the red **Revoke access**. The panel flips to the amber
+*"No purchasing authority"* state, with the grant form back.
 
 Immediately, in `/chat`:
 

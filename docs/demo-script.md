@@ -144,7 +144,9 @@ now buy the silent wireless mouse
 1. **Spend guardrail** — `auto_approve_limit` in red: `₹1,299.00 / ₹500.00`.
    The two hard caps are green.
 2. The order card: **Awaiting approval**.
-3. The **Your approval is needed** panel with **Approve ₹1,299.00** / **Decline**.
+3. The amber **"Approve this purchase?"** panel — eyebrow *Waiting on you*, the
+   amount at display size, the bounds it checked, and **Approve ₹1,299.00** /
+   **Decline**.
 
 > "The agent stopped itself. It didn't ask me in words and then take my 'yes' as
 > permission — approval is a POST to `/orders/{id}/approve` tied to this specific

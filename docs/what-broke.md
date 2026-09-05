@@ -10,6 +10,23 @@ test suite were both true while the chat UI rendered nothing at all.
 
 ---
 
+## UI rebuild · The demo scripts quoted copy that no longer existed
+
+**Broke:** Nothing at runtime. The interface rebuild rewrote on-screen wording —
+"Your approval is needed" became "Approve this purchase?", and the revoked-state
+message changed — but `demo-script.md` and `demo-clips.md` still quoted the old
+strings verbatim as things to point at on camera.
+
+**Cause:** the scripts were written against the previous UI and nothing ties them
+to it. Copy drifts silently; the docs keep looking right.
+
+**Fix:** corrected both, and checked every quoted UI string against the
+components. Worth catching before a take rather than during one — reading a line
+that does not match the screen is the kind of stumble a five-minute video cannot
+absorb.
+
+---
+
 ## Post-M9 · No payment had ever actually settled
 
 **Broke:** Not a crash — a hole. `verify_payment` had **zero** audit entries and
