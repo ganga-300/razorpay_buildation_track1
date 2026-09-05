@@ -10,6 +10,35 @@ test suite were both true while the chat UI rendered nothing at all.
 
 ---
 
+## Post-M9 · No payment had ever actually settled
+
+**Broke:** Not a crash — a hole. `verify_payment` had **zero** audit entries and
+no order had ever reached `paid`, so stock had never decremented either. The
+settlement path was written and unit-tested against a fake, and had never once
+run against Razorpay's real signature scheme.
+
+**Fix:** computed the signature Razorpay Checkout actually returns — HMAC-SHA256
+of `<order_id>|<payment_id>` keyed with the merchant secret — and posted it to
+the live deployment. Results:
+
+| | |
+|---|---|
+| valid signature | `200`, order → `paid`, stock 52 → 51, audited at 1315ms |
+| forged signature | `400 signature_mismatch`, order → `failed`, **payment id not recorded** |
+
+That second row is the security property the whole design rests on: an
+unverifiable payment is never indistinguishable from a declined one.
+
+`demo/settle_test_payment.py` makes it repeatable, so a demo take does not
+depend on filling a card form on camera. It refuses to run against anything but
+an `rzp_test_` key.
+
+**Lesson:** "covered by tests" and "has ever run" are different claims. The unit
+tests asserted behaviour against a fake signature verifier; nothing had exercised
+the real algorithm end to end until this.
+
+---
+
 ## Post-M9 · The chat agent could never settle a payment
 
 **Broke:** A buyer could not ask "did my payment go through?" in chat, and

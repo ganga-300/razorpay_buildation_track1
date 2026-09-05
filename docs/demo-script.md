@@ -180,6 +180,23 @@ Two ways to show this. **Pick one and rehearse it.**
 
 ### Option A — signature verification fails (deterministic, recommended)
 
+Fastest form, using the bundled utility:
+
+```bash
+python demo/settle_test_payment.py --forge
+```
+
+It sends a signature not derived from the secret. The order flips to **failed**,
+the payment id is never recorded, and the audit trail keeps the refusal.
+
+To settle one *successfully* without clicking through Checkout on camera:
+
+```bash
+python demo/settle_test_payment.py
+```
+
+Or do it by hand:
+
 Take the `razorpay_order_id` from any order awaiting payment, then:
 
 ```bash
