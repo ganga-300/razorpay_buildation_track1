@@ -41,6 +41,15 @@ STATUS_WORDS = {
 }
 CANCEL_WORDS = {"cancel", "cancelled", "no thanks", "never mind", "stop", "forget it"}
 
+# Words that mean the buyer is still looking. Checked against the RAW message,
+# before stopword removal, so that naming a product the agent just listed can be
+# told apart from asking to see more of them.
+BROWSE_WORDS = {
+    "show", "find", "search", "see", "browse", "look", "looking", "what",
+    "which", "any", "anything", "else", "other", "others", "options",
+    "alternative", "alternatives", "cheaper", "instead", "compare",
+}
+
 # Words that carry no signal when matching a request to a product. Catalog
 # search is AND across tokens, so a single conversational word like "show"
 # reduces a good query to zero results.
@@ -481,6 +490,16 @@ class ScriptedPlanner:
             return _respond(_text_block(
                 "Understood — I won't order anything. Nothing has been charged."
             ))
+
+        # The agent just listed products and asked which one to order. Answering
+        # with the product's name is the natural reply, and it carries no verb —
+        # so intent alone reads it as "browse" and the agent searches again,
+        # relists the same item, and asks the same question. That loop is what a
+        # buyer actually hits first.
+        if intent == "browse" and not _mentions(text, BROWSE_WORDS):
+            named = _best_match(text, _products_seen(messages))
+            if named is not None:
+                intent = "purchase"
 
         if intent == "purchase":
             if exact:

@@ -277,3 +277,51 @@ async def test_razorpay_ids_survive_keyword_matching(
     assert values is not None
     assert values["razorpay_order_id"] == "order_ABCdef123456"
     assert values["razorpay_payment_id"] == "pay_XYZabc789012"
+
+
+# --------------------------------------------------------------------------
+# The "which one?" loop
+# --------------------------------------------------------------------------
+
+
+async def test_naming_a_listed_product_orders_it(
+    db_session: AsyncSession, fake_razorpay: FakeRazorpay
+) -> None:
+    """Regression: the agent asked "which one?" and ignored the answer.
+
+    Replying with the product's name carries no verb, so intent alone read it as
+    "browse" — the agent searched again, relisted the same item, and asked the
+    same question. A buyer hits that loop on their first conversation.
+    """
+    _, state = await drive(db_session, "show me noise cancelling headphones")
+    events, _ = await drive(
+        db_session,
+        "Wireless Noise Cancelling Headphones",
+        history=state["messages"],
+    )
+
+    call = first(events, "tool_call")
+    assert call["tool"] == "create_order"
+
+
+async def test_asking_to_see_more_still_searches(
+    db_session: AsyncSession, fake_razorpay: FakeRazorpay
+) -> None:
+    """The fix must not turn every browse into a purchase."""
+    _, state = await drive(db_session, "show me a usb-c cable")
+
+    for phrase in (
+        "show me something else",
+        "what other cables do you have",
+        "any cheaper options",
+    ):
+        events, _ = await drive(db_session, phrase, history=state["messages"])
+        assert first(events, "tool_call")["tool"] == "search_catalog", phrase
+
+
+async def test_naming_something_never_shown_still_searches(
+    db_session: AsyncSession, fake_razorpay: FakeRazorpay
+) -> None:
+    """With nothing listed yet, a bare product name is a search, not an order."""
+    events, _ = await drive(db_session, "wireless mouse")
+    assert first(events, "tool_call")["tool"] == "search_catalog"
