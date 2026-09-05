@@ -24,6 +24,28 @@ const SIZES: Record<Size, string> = {
   lg: "h-12 gap-2 px-7 text-[0.9375rem]",
 };
 
+/**
+ * The button's own styling, exported so a link can wear it.
+ *
+ * A `<button>` wrapping an `<a>` is invalid and breaks keyboard and middle-click
+ * behaviour, so anything that navigates stays an anchor and borrows the look.
+ */
+export function buttonClasses(
+  variant: Variant = "primary",
+  size: Size = "md",
+  className?: string,
+): string {
+  return cn(
+    "inline-flex items-center justify-center rounded-full font-medium",
+    "whitespace-nowrap tracking-[-0.01em]",
+    "transition-[opacity,transform,background-color,border-color] duration-fast ease",
+    "active:scale-[0.98] disabled:cursor-not-allowed disabled:active:scale-100",
+    VARIANTS[variant],
+    SIZES[size],
+    className,
+  );
+}
+
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
   size?: Size;
@@ -36,19 +58,11 @@ export function Button({
   type = "button",
   ...props
 }: ButtonProps) {
+  // A press that moves is a press you felt.
   return (
     <button
       type={type}
-      className={cn(
-        "inline-flex items-center justify-center rounded-full font-medium",
-        "whitespace-nowrap tracking-[-0.01em]",
-        // A press that moves is a press you felt.
-        "transition-[opacity,transform,background-color,border-color] duration-fast ease",
-        "active:scale-[0.98] disabled:cursor-not-allowed disabled:active:scale-100",
-        VARIANTS[variant],
-        SIZES[size],
-        className,
-      )}
+      className={buttonClasses(variant, size, className)}
       {...props}
     />
   );
