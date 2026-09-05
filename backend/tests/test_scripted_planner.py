@@ -166,3 +166,114 @@ async def test_a_provider_failure_is_explained(
     reply = first(events, "done")["text"]
     assert "retried once" in reply
     assert "Nothing was charged" in reply
+
+
+# --------------------------------------------------------------------------
+# The planner reaches every tool, not just the two it needs to buy
+# --------------------------------------------------------------------------
+
+
+async def test_the_planner_can_reach_every_registered_tool() -> None:
+    """The chat agent should not be less capable than an external MCP client.
+
+    `get_order_status` and `verify_payment` were exposed over MCP while the
+    planner could never call them, so a buyer asking "did my payment go
+    through?" in chat got nothing — while a stranger's agent could ask.
+    """
+    import re
+    from pathlib import Path
+
+    from app.agents import scripted_planner
+    from app.tools import registry
+
+    source = Path(scripted_planner.__file__).read_text()
+    reachable = set(re.findall(r'_tool_block\([^,]+,\s*"([a-z_]+)"', source))
+
+    missing = set(registry.names()) - reachable
+    assert not missing, f"the planner can never call: {sorted(missing)}"
+
+
+async def test_asking_about_an_order_checks_its_status(
+    db_session: AsyncSession, generous_limits: None, fake_razorpay: FakeRazorpay
+) -> None:
+    _, state = await drive(db_session, "show me a usb-c cable")
+    _, state = await drive(db_session, "buy the cable", history=state["messages"])
+
+    events, _ = await drive(
+        db_session, "did my payment go through?", history=state["messages"]
+    )
+
+    call = first(events, "tool_call")
+    assert call["tool"] == "get_order_status"
+    assert call["mutates_money"] is False
+    assert "awaiting payment" in first(events, "done")["text"].lower()
+
+
+async def test_asking_before_ordering_says_so(db_session: AsyncSession) -> None:
+    events, _ = await drive(db_session, "what's the status of my order?")
+    assert "tool_call" not in kinds(events)
+    assert "haven't placed an order" in first(events, "done")["text"]
+
+
+async def test_pasted_checkout_values_trigger_verification(
+    db_session: AsyncSession, generous_limits: None, fake_razorpay: FakeRazorpay
+) -> None:
+    """The one case where settling through chat makes sense."""
+    _, state = await drive(db_session, "show me a usb-c cable")
+    _, state = await drive(db_session, "buy the cable", history=state["messages"])
+
+    rzp_order = fake_razorpay.issued_ids[0]
+    signature = "a" * 64
+    events, _ = await drive(
+        db_session,
+        f"paid: {rzp_order} pay_TESTPAYMENT01 {signature}",
+        history=state["messages"],
+    )
+
+    call = first(events, "tool_call")
+    assert call["tool"] == "verify_payment"
+    assert call["mutates_money"] is True
+    assert first(events, "order")["order"]["status"] == OrderStatus.PAID.value
+
+
+async def test_incomplete_checkout_values_are_not_treated_as_a_verification(
+    db_session: AsyncSession, generous_limits: None, fake_razorpay: FakeRazorpay
+) -> None:
+    """Verifying with a missing field is a failed verification, not a partial one."""
+    events, _ = await drive(db_session, "I paid, the id was order_TX5W4A4ui4doy5")
+    assert all(e.get("tool") != "verify_payment" for e in events)
+
+
+async def test_an_exact_product_id_is_fetched_directly(
+    db_session: AsyncSession,
+) -> None:
+    events, _ = await drive(db_session, "tell me about prd-mouse")
+    call = first(events, "tool_call")
+    assert call["tool"] == "get_product"
+    assert call["arguments"]["product_id"] == "prd-mouse"
+
+
+async def test_buying_by_exact_id_skips_the_search(
+    db_session: AsyncSession, generous_limits: None, fake_razorpay: FakeRazorpay
+) -> None:
+    events, _ = await drive(db_session, "buy prd-cable")
+    call = first(events, "tool_call")
+    assert call["tool"] == "create_order"
+    assert call["arguments"]["product_id"] == "prd-cable"
+
+
+async def test_razorpay_ids_survive_keyword_matching(
+    db_session: AsyncSession, generous_limits: None, fake_razorpay: FakeRazorpay
+) -> None:
+    """Regression: the planner lowercased the whole message for matching.
+
+    Razorpay identifiers are case-sensitive, so `order_TESTFAKE0001` arrived as
+    `order_testfake0001` and every pasted verification failed with
+    order_not_found — a path that could never have worked in production.
+    """
+    from app.agents.scripted_planner import _checkout_values
+
+    values = _checkout_values(f"Paid! order_ABCdef123456 pay_XYZabc789012 {'a' * 64}")
+    assert values is not None
+    assert values["razorpay_order_id"] == "order_ABCdef123456"
+    assert values["razorpay_payment_id"] == "pay_XYZabc789012"

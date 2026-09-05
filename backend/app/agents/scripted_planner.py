@@ -34,6 +34,11 @@ logger = logging.getLogger(__name__)
 # to see headphones.
 PURCHASE_WORDS = {"buy", "order", "purchase", "yes", "approve", "confirm", "get me"}
 VERIFY_WORDS = {"paid", "payment done", "verify", "completed payment"}
+# "did it work", "what happened to my order" — a status question, not a purchase.
+STATUS_WORDS = {
+    "status", "did it work", "go through", "went through", "confirmed",
+    "what happened", "any update", "is it done",
+}
 CANCEL_WORDS = {"cancel", "cancelled", "no thanks", "never mind", "stop", "forget it"}
 
 # Words that carry no signal when matching a request to a product. Catalog
@@ -82,16 +87,30 @@ def _respond(*blocks: dict[str, Any]) -> LLMResponse:
 
 
 def _mentions(text: str, phrases: set[str]) -> bool:
-    """True if any phrase appears as a whole word or whole phrase."""
+    """True if any phrase appears as a whole word or whole phrase.
+
+    Case-folds internally, so callers can pass the original message and keep
+    case-sensitive content (Razorpay ids) intact.
+    """
+    lowered = text.lower()
     return any(
-        re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", text) for phrase in phrases
+        re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", lowered) for phrase in phrases
     )
 
 
 def _latest_user_text(messages: list[dict[str, Any]]) -> str:
+    """The buyer's most recent message, in its ORIGINAL case.
+
+    It used to be lowercased here for keyword matching, which silently corrupted
+    the one thing in a chat message that is case-sensitive: Razorpay
+    identifiers. `order_TESTFAKE0001` became `order_testfake0001` and every
+    pasted verification failed with order_not_found.
+
+    Case folding now happens where matching needs it, never on the way in.
+    """
     for m in reversed(messages):
         if m.get("role") == "user" and isinstance(m.get("content"), str):
-            return m["content"].lower()
+            return m["content"]
     return ""
 
 
@@ -133,6 +152,62 @@ def _products_seen(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
             if isinstance(data.get("product"), dict) and data["product"].get("id"):
                 found[data["product"]["id"]] = data["product"]
     return list(found.values())
+
+
+def _orders_seen(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Every order this conversation has produced, oldest first.
+
+    Lets "did my payment go through?" resolve against the order the buyer is
+    actually asking about, without them having to quote an id back at us.
+    """
+    found: dict[str, dict[str, Any]] = {}
+    for message in messages:
+        if not isinstance(message.get("content"), list):
+            continue
+        for block in message["content"]:
+            if not isinstance(block, dict) or block.get("type") != "tool_result":
+                continue
+            try:
+                payload = json.loads(block.get("content") or "{}")
+            except (ValueError, TypeError):
+                continue
+            data = payload.get("data") or {}
+            if data.get("order_id"):
+                found[data["order_id"]] = data
+            inner = data.get("order")
+            if isinstance(inner, dict) and inner.get("order_id"):
+                found[inner["order_id"]] = inner
+    return list(found.values())
+
+
+# Razorpay identifiers a buyer might paste back after paying. The signature is
+# a 64-character HMAC-SHA256 hex digest.
+_RZP_ORDER = re.compile(r"\border_[A-Za-z0-9]{8,}\b")
+_RZP_PAYMENT = re.compile(r"\bpay_[A-Za-z0-9]{8,}\b")
+_RZP_SIGNATURE = re.compile(r"\b[a-f0-9]{64}\b")
+
+
+def _checkout_values(text: str) -> dict[str, str] | None:
+    """Pull a full set of Razorpay checkout values out of a chat message.
+
+    All three or nothing: verifying with a missing field is not a partial
+    verification, it is a failed one, and failing it here wastes a round trip to
+    tell the buyer something we can already see.
+    """
+    order = _RZP_ORDER.search(text)
+    payment = _RZP_PAYMENT.search(text)
+    signature = _RZP_SIGNATURE.search(text)
+    if not (order and payment and signature):
+        return None
+    return {
+        "razorpay_order_id": order.group(0),
+        "razorpay_payment_id": payment.group(0),
+        "razorpay_signature": signature.group(0),
+    }
+
+
+# An exact catalog id the buyer named, e.g. "get me prd-wireless-mouse".
+_PRODUCT_ID = re.compile(r"\bprd-[a-z0-9-]{3,}\b", re.I)
 
 
 def _keywords(text: str) -> set[str]:
@@ -266,6 +341,30 @@ class ScriptedPlanner:
                 "limits I checked are shown above."
             ))
 
+        # get_order_status wraps the order one level deeper.
+        inner = data.get("order")
+        if isinstance(inner, dict) and inner.get("order_id"):
+            status = inner["status"]
+            total = (inner.get("total") or {}).get("display", "")
+            phrasing = {
+                "paid": f"That order is settled — {total} paid and confirmed.",
+                "awaiting_payment": (
+                    f"That order is still awaiting payment. {total} is reserved but "
+                    "nothing has been charged yet — complete the payment to finish."
+                ),
+                "pending_approval": (
+                    f"That order is still waiting on your approval. {total} won't be "
+                    "charged until you approve it."
+                ),
+                "failed": "That order failed. "
+                + ((inner.get("failure") or {}).get("reason") or "No payment was taken."),
+                "blocked": "That order was blocked by a spend guardrail, so nothing was charged.",
+                "cancelled": "That order was cancelled. Nothing was charged.",
+            }
+            return _respond(_text_block(
+                phrasing.get(status, f"That order is currently '{status}'.")
+            ))
+
         if data.get("order_id") and data.get("status") == "paid":
             return _respond(_text_block(
                 f"Payment verified. Order {data['order_id']} is settled."
@@ -339,12 +438,60 @@ class ScriptedPlanner:
 
         intent = self._classify(text)
 
+        # The buyer pasted the values Razorpay Checkout handed back. This is the
+        # one case where settling through chat makes sense; the browser callback
+        # posts to /payments/verify directly and does not need the agent.
+        checkout = _checkout_values(text)
+        if checkout:
+            return _respond(
+                _text_block("Verifying that payment signature."),
+                _tool_block(self._next_id(), "verify_payment", checkout),
+            )
+
+        # "Did my payment go through?" — answerable from the order we created,
+        # without asking the buyer to quote an id back at us.
+        if intent == "verify" or _mentions(text, STATUS_WORDS):
+            orders = _orders_seen(messages)
+            if orders:
+                return _respond(
+                    _text_block("Let me check that order."),
+                    _tool_block(
+                        self._next_id(),
+                        "get_order_status",
+                        {"order_id": orders[-1]["order_id"]},
+                    ),
+                )
+            return _respond(_text_block(
+                "I haven't placed an order in this conversation yet, so there's "
+                "nothing to check. Tell me what you'd like to buy."
+            ))
+
+        # The buyer named an exact catalog id — fetch it directly rather than
+        # guessing at it through search.
+        exact = _PRODUCT_ID.search(text)
+        if exact and intent != "purchase":
+            return _respond(
+                _text_block("Looking that up."),
+                _tool_block(
+                    self._next_id(), "get_product", {"product_id": exact.group(0).lower()}
+                ),
+            )
+
         if intent == "cancel":
             return _respond(_text_block(
                 "Understood — I won't order anything. Nothing has been charged."
             ))
 
         if intent == "purchase":
+            if exact:
+                return _respond(
+                    _text_block("Checking the spend limits first."),
+                    _tool_block(
+                        self._next_id(),
+                        "create_order",
+                        {"product_id": exact.group(0).lower(), "quantity": 1},
+                    ),
+                )
             match = _best_match(text, _products_seen(messages))
             if match:
                 return _respond(

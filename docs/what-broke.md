@@ -10,6 +10,40 @@ test suite were both true while the chat UI rendered nothing at all.
 
 ---
 
+## Post-M9 · The chat agent could never settle a payment
+
+**Broke:** A buyer could not ask "did my payment go through?" in chat, and
+pasting the values Razorpay Checkout returned did nothing.
+
+**Cause:** the scripted planner only ever called two of the five registered
+tools. `get_order_status` and `verify_payment` were exposed over MCP — so a
+*stranger's* agent could use them while our own chat agent could not.
+
+**Fix:** the planner now reaches every registered tool, and a test scans its
+source for `_tool_block("...")` calls and fails if any registered tool becomes
+unreachable again.
+
+---
+
+## Post-M9 · Razorpay ids were being lowercased in chat
+
+**Broke:** Pasting checkout values into chat always failed with
+`order_not_found`, even with a correct id.
+
+**Cause:** `_latest_user_text()` lowercased the buyer's message so keyword
+matching would work. Razorpay identifiers are **case-sensitive**, so
+`order_TESTFAKE0001` reached the tool as `order_testfake0001` and matched no
+order. The lookup was correct; the input had been corrupted three layers earlier.
+
+**Fix:** the message is kept in its original case and folded only where matching
+needs it. Found because a test asserted a real settlement rather than just that
+the tool was called — asserting the call alone would have passed.
+
+**Lesson:** normalising input early is convenient and lossy. Case folding for
+comparison should happen at the comparison, not on the way in.
+
+---
+
 ## M9 · `requirements.txt` could not be installed from a clean clone
 
 **Broke:** Cloning the repo and following the README failed immediately:
