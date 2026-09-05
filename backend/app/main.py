@@ -14,6 +14,7 @@ from app.api.catalog import router as catalog_router
 from app.api.audit import router as audit_router
 from app.api.chat import router as chat_router
 from app.api.grants import router as grants_router
+from app.api.metrics import router as metrics_router
 from app.api.orders import router as orders_router
 from app.api.health import router as health_router
 from app.config import settings
@@ -83,6 +84,9 @@ def create_app() -> FastAPI:
 
     # Consent lifecycle: grant and revoke purchasing authority.
     app.include_router(grants_router)
+
+    # What the cost-reduction rules in app/agents/llm.py have measurably saved.
+    app.include_router(metrics_router)
 
     return app
 

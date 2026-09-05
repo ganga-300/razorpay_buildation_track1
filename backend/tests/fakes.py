@@ -63,6 +63,8 @@ class ScriptedLLM:
         tools: list[dict[str, Any]] | None = None,
         max_tokens: int | None = None,
         effort: str | None = None,
+        model: str | None = None,
+        purpose: str = "agent",
     ) -> LLMResponse:
         self.calls.append(
             {
@@ -71,6 +73,8 @@ class ScriptedLLM:
                 "tools": [t["name"] for t in (tools or [])],
                 "max_tokens": max_tokens,
                 "effort": effort,
+                "model": model,
+                "purpose": purpose,
             }
         )
 
@@ -95,11 +99,15 @@ class ScriptedLLM:
         tools: list[dict[str, Any]] | None = None,
         max_tokens: int | None = None,
         effort: str | None = None,
+        model: str | None = None,
+        purpose: str = "agent",
     ) -> AsyncIterator[tuple[str, Any]]:
         result = await self.complete(
             system=system,
             messages=messages,
             tools=tools,
+            model=model,
+            purpose=purpose,
             max_tokens=max_tokens,
             effort=effort,
         )

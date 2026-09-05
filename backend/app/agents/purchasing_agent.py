@@ -43,6 +43,7 @@ from app.agents.prompts import (
     VALID_INTENTS,
 )
 from app.config import settings
+from app.services.llm_usage import record_short_circuited_intent
 from app.tools import execute_tool, registry
 
 logger = logging.getLogger(__name__)
@@ -59,6 +60,39 @@ TOOL_PHASES: dict[str, str] = {
 }
 
 PHASE_NODES = ("search_catalog", "create_order", "verify_payment")
+
+# Exact, whole-message matches that need no model call to classify. These are
+# not a heuristic guess at intent — they are messages with no second reading:
+# a bare "yes" in reply to a proposed order IS an approval, by the same
+# definition the classifier itself is given ("purchase — asking to buy,
+# confirming a purchase, or approving an order"). Answering them without a
+# network round trip does not lower classification quality, because there is
+# no quality gap to close — this is the "don't pay for something free" case,
+# not a place where cost is being traded against correctness.
+#
+# Deliberately whole-message only, matched after stripping and lowercasing.
+# "yes but not the noise cancelling ones" must still reach the model — it is
+# not unambiguous, and a substring match would misclassify it.
+UNAMBIGUOUS_INTENTS: dict[str, str] = {
+    "yes": "purchase",
+    "yeah": "purchase",
+    "yep": "purchase",
+    "yup": "purchase",
+    "sure": "purchase",
+    "ok": "purchase",
+    "okay": "purchase",
+    "approve": "purchase",
+    "confirm": "purchase",
+    "confirmed": "purchase",
+    "no": "cancel",
+    "nope": "cancel",
+    "nah": "cancel",
+    "cancel": "cancel",
+    "decline": "cancel",
+    "stop": "cancel",
+    "never mind": "cancel",
+    "nevermind": "cancel",
+}
 
 # Every event type `run_turn` can emit. The SSE layer derives what it forwards
 # from this set, so adding an event in one place and forgetting the other is not
@@ -154,12 +188,25 @@ def build_graph(deps: AgentDeps) -> Any:
         if not latest:
             return {"intent": DEFAULT_INTENT}
 
+        shortcut = UNAMBIGUOUS_INTENTS.get(latest.strip().lower())
+        if shortcut is not None:
+            record_short_circuited_intent(reference_model=settings.anthropic_intent_model)
+            return {
+                "intent": shortcut,
+                "events": [_event("intent", intent=shortcut)],
+            }
+
         try:
             response = await deps.llm.complete(
                 system=INTENT_SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": latest}],
                 max_tokens=16,
                 effort="low",
+                # A 5-way classification that never gates money has no business
+                # running on the same model the buyer is talking to — see
+                # AnthropicLLMClient and app/services/llm_usage.py.
+                model=settings.anthropic_intent_model,
+                purpose="intent",
             )
             label = response.text.strip().lower().split()[0] if response.text.strip() else ""
         except (LLMUnavailable, IndexError) as exc:

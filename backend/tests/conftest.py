@@ -169,6 +169,16 @@ def _isolate_idempotency_store() -> "Generator[None, None, None]":
 
 
 @pytest.fixture(autouse=True)
+def _isolate_llm_usage() -> "Generator[None, None, None]":
+    """The cost/usage counters are process-globals; the same leak risk applies."""
+    from app.services import llm_usage
+
+    llm_usage.reset()
+    yield
+    llm_usage.reset()
+
+
+@pytest.fixture(autouse=True)
 def _fast_retries(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep the retry backoff from adding real seconds to the suite."""
     monkeypatch.setattr(settings, "provider_retry_base_delay", 0.0)

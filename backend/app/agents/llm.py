@@ -39,6 +39,11 @@ class LLMResponse:
     stop_reason: str = "end_turn"
     # Raw content blocks, JSON-serialisable, for replay on the next turn.
     content: list[dict[str, Any]] = field(default_factory=list)
+    # input_tokens / output_tokens / cache_creation_input_tokens /
+    # cache_read_input_tokens, straight from `message.usage`. Empty for a
+    # client that never talked to a real API (the scripted planner, test
+    # fakes) — there is nothing to have spent.
+    usage: dict[str, int] = field(default_factory=dict)
 
     @property
     def wants_tools(self) -> bool:
@@ -65,6 +70,8 @@ class LLMClient(Protocol):
         tools: list[dict[str, Any]] | None = None,
         max_tokens: int | None = None,
         effort: str | None = None,
+        model: str | None = None,
+        purpose: str = "agent",
     ) -> LLMResponse: ...
 
     def stream(
@@ -75,6 +82,8 @@ class LLMClient(Protocol):
         tools: list[dict[str, Any]] | None = None,
         max_tokens: int | None = None,
         effort: str | None = None,
+        model: str | None = None,
+        purpose: str = "agent",
     ) -> AsyncIterator[tuple[str, Any]]:
         """Yield ('text', delta) events, then exactly one ('final', LLMResponse)."""
         ...
@@ -107,6 +116,19 @@ def extract_tool_calls(content: list[dict[str, Any]]) -> list[ToolCall]:
         for b in content
         if b.get("type") == "tool_use"
     ]
+
+
+
+# Models known to run WITHOUT adaptive thinking / the `effort` parameter.
+# Haiku 4.5 takes neither: sending `output_config.effort` to it is a 400
+# ("errors on ... Haiku 4.5" per the model family's documented behaviour), and
+# omitting `thinking` entirely is what makes it run with no extended-thinking
+# overhead at all — exactly what a 5-way classification call should cost.
+# Every other model this project uses (the Opus tier) supports both and is
+# reasoned about elsewhere in this file as "the default"; this set exists so a
+# genuinely different model doesn't silently inherit Opus-shaped request
+# fields it cannot accept.
+_NO_THINKING_NO_EFFORT_MODELS = frozenset({"claude-haiku-4-5"})
 
 
 class AnthropicLLMClient:
@@ -147,20 +169,66 @@ class AnthropicLLMClient:
         tools: list[dict[str, Any]] | None,
         max_tokens: int | None,
         effort: str | None,
-    ) -> dict[str, Any]:
+        model: str | None,
+    ) -> tuple[dict[str, Any], str]:
+        resolved_model = model or self.model
+
+        # Prompt caching: the system prompt plus the tool schemas are ~1.6K
+        # static tokens resent on every iteration of every tool-calling round,
+        # for every turn, for every buyer — currently at full price with zero
+        # reuse. Anthropic renders `tools` before `system`, so a single
+        # breakpoint on the (last block of the) system prompt caches both
+        # together. Only worth doing when `tools` is present: that is the one
+        # call shape big enough to clear even Claude Opus 5's lowest-in-class
+        # 512-token minimum (the plain intent-classification prompt is ~110
+        # tokens and would never cross it — a marker there would only pay the
+        # write premium for zero reads, ever).
+        if tools:
+            system_field: str | list[dict[str, Any]] = [
+                {
+                    "type": "text",
+                    "text": system,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ]
+        else:
+            system_field = system
+
         kwargs: dict[str, Any] = {
-            "model": self.model,
+            "model": resolved_model,
             "max_tokens": max_tokens or self.max_tokens,
-            "system": system,
+            "system": system_field,
             "messages": messages,
+        }
+
+        if resolved_model not in _NO_THINKING_NO_EFFORT_MODELS:
             # Adaptive thinking: the model decides how much to reason per turn.
             # `budget_tokens` is rejected on this model generation.
-            "thinking": {"type": "adaptive"},
-            "output_config": {"effort": effort or settings.anthropic_effort},
-        }
+            kwargs["thinking"] = {"type": "adaptive"}
+            kwargs["output_config"] = {"effort": effort or settings.anthropic_effort}
+
         if tools:
             kwargs["tools"] = tools
-        return kwargs
+        return kwargs, resolved_model
+
+    @staticmethod
+    def _usage_dict(message: Any) -> dict[str, int]:
+        usage = getattr(message, "usage", None)
+        if usage is None:
+            return {}
+        return {
+            "input_tokens": usage.input_tokens,
+            "output_tokens": usage.output_tokens,
+            "cache_creation_input_tokens": usage.cache_creation_input_tokens or 0,
+            "cache_read_input_tokens": usage.cache_read_input_tokens or 0,
+        }
+
+    def _record(self, *, purpose: str, model: str, usage: dict[str, int]) -> None:
+        if not usage:
+            return
+        from app.services.llm_usage import record_llm_call
+
+        record_llm_call(purpose=purpose, model=model, **usage)
 
     async def complete(
         self,
@@ -170,19 +238,25 @@ class AnthropicLLMClient:
         tools: list[dict[str, Any]] | None = None,
         max_tokens: int | None = None,
         effort: str | None = None,
+        model: str | None = None,
+        purpose: str = "agent",
     ) -> LLMResponse:
         client = self._require_client()
-        kwargs = self._request_kwargs(
+        kwargs, resolved_model = self._request_kwargs(
             system=system,
             messages=messages,
             tools=tools,
             max_tokens=max_tokens,
             effort=effort,
+            model=model,
         )
         try:
             message = await client.messages.create(**kwargs)
         except Exception as exc:  # noqa: BLE001 — mapped to a domain error below
             raise _as_unavailable(exc) from exc
+
+        usage = self._usage_dict(message)
+        self._record(purpose=purpose, model=resolved_model, usage=usage)
 
         content = serialise_blocks(message.content)
         return LLMResponse(
@@ -190,6 +264,7 @@ class AnthropicLLMClient:
             tool_calls=extract_tool_calls(content),
             stop_reason=message.stop_reason or "end_turn",
             content=content,
+            usage=usage,
         )
 
     async def stream(
@@ -200,15 +275,18 @@ class AnthropicLLMClient:
         tools: list[dict[str, Any]] | None = None,
         max_tokens: int | None = None,
         effort: str | None = None,
+        model: str | None = None,
+        purpose: str = "agent",
     ) -> AsyncIterator[tuple[str, Any]]:
         """Stream text deltas, then the assembled final response."""
         client = self._require_client()
-        kwargs = self._request_kwargs(
+        kwargs, resolved_model = self._request_kwargs(
             system=system,
             messages=messages,
             tools=tools,
             max_tokens=max_tokens,
             effort=effort,
+            model=model,
         )
         try:
             async with client.messages.stream(**kwargs) as stream:
@@ -218,6 +296,9 @@ class AnthropicLLMClient:
         except Exception as exc:  # noqa: BLE001 — mapped to a domain error below
             raise _as_unavailable(exc) from exc
 
+        usage = self._usage_dict(message)
+        self._record(purpose=purpose, model=resolved_model, usage=usage)
+
         content = serialise_blocks(message.content)
         yield (
             "final",
@@ -226,6 +307,7 @@ class AnthropicLLMClient:
                 tool_calls=extract_tool_calls(content),
                 stop_reason=message.stop_reason or "end_turn",
                 content=content,
+                usage=usage,
             ),
         )
 

@@ -433,7 +433,14 @@ class ScriptedPlanner:
         tools: list[dict[str, Any]] | None = None,
         max_tokens: int | None = None,
         effort: str | None = None,
+        model: str | None = None,
+        purpose: str = "agent",
     ) -> LLMResponse:
+        # model/purpose are part of the LLMClient protocol (they route real
+        # API calls to a cheaper model and tag them for cost accounting — see
+        # AnthropicLLMClient). The planner never calls an API, so there is
+        # nothing to route and nothing to spend; both are accepted and ignored
+        # so it satisfies the same interface Claude does.
         text = _latest_user_text(messages)
 
         # No tools bound => the intent-classification call.
@@ -541,10 +548,13 @@ class ScriptedPlanner:
         tools: list[dict[str, Any]] | None = None,
         max_tokens: int | None = None,
         effort: str | None = None,
+        model: str | None = None,
+        purpose: str = "agent",
     ) -> AsyncIterator[tuple[str, Any]]:
         result = await self.complete(
             system=system, messages=messages, tools=tools,
             max_tokens=max_tokens, effort=effort,
+            model=model, purpose=purpose,
         )
         if result.text:
             yield ("text", result.text)

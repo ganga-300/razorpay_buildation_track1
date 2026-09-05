@@ -60,6 +60,15 @@ class Settings(BaseSettings):
     # so model effort is never the thing keeping a purchase safe.
     anthropic_effort: Literal["low", "medium", "high", "xhigh", "max"] = "medium"
 
+    # Intent classification is a 5-way label, not a purchasing decision — it
+    # never gates money (guardrails.py does that), it only feeds the audit
+    # trail and the UI's intent badge. Opus 5 is the wrong tool for it: a
+    # cheap, fast model with no extended thinking gets the same label for a
+    # fraction of the cost. Kept separately configurable so it can be pointed
+    # at whatever the cheapest capable model is without touching the model the
+    # buyer actually talks to.
+    anthropic_intent_model: str = "claude-haiku-4-5"
+
     # "model"    — Claude drives the conversation (needs a funded ANTHROPIC_API_KEY)
     # "scripted"  — a deterministic keyword planner drives it, with no model call.
     #
